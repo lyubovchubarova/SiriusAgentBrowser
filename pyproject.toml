@@ -40,6 +40,20 @@ select = [
 ]
 ignore = [
     "E501",   # line too long (handled by formatter)
+    "RUF002", # ambiguous characters in docstrings (кириллица OK)
+    "RUF003", # ambiguous characters in comments (кириллица OK)
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Ноутбуки — учебные материалы, ослабляем требования
+"notebooks/*.ipynb" = [
+    "E402",   # module level import not at top (OK в ноутбуках)
+    "I001",   # unsorted imports (примеры для обучения)
+    "ARG001", # unused arguments (примеры функций)
+    "UP007",  # Use X | Y for type annotations (показываем старый стиль)
+    "UP037",  # Remove quotes from type annotation
+    "UP045",  # Use X | None (показываем Optional)
+    "W293",   # blank line contains whitespace
 ]
 
 [tool.ruff.lint.isort]
