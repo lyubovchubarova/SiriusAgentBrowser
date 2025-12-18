@@ -1,4 +1,5 @@
 from dotenv import load_dotenv
+
 from planner import Planner
 
 load_dotenv()

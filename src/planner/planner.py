@@ -1,8 +1,9 @@
-import os
 import json
+import os
 import re
-from openai import OpenAI
+
 from models import Plan
+from openai import OpenAI
 
 SYSTEM_PROMPT = """
 You are a planner for browser automation.
