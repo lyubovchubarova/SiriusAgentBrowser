@@ -18,9 +18,11 @@ pip3 install -r requirements.txt
 ## создайте файл .env
 ```
 YANDEX_GPT_API_TOKEN=<your-token>
+YANDEX_CLOUD_FOLDER_ID=<your-folder-id>
 ```
 
 ## запуск
 ```python
 python main.py
 ```
+запускать обязательно из директории с env

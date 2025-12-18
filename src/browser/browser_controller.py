@@ -4,15 +4,21 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from playwright.sync_api import sync_playwright, Playwright, Browser, BrowserContext, Page
+from playwright.sync_api import (
+    sync_playwright,
+    Playwright,
+    Browser,
+    BrowserContext,
+    Page,
+)
 
 
 @dataclass
 class BrowserOptions:
-    headless: bool = True              # False = окно видно
-    browser_name: str = "chromium"     # chromium | firefox | webkit
-    slow_mo_ms: int = 0                # для дебага, например 200
-    viewport: Optional[dict] = None    # например {"width": 1280, "height": 720}
+    headless: bool = True  # False = окно видно
+    browser_name: str = "chromium"  # chromium | firefox | webkit
+    slow_mo_ms: int = 0  # для дебага, например 200
+    viewport: Optional[dict] = None  # например {"width": 1280, "height": 720}
 
 
 class BrowserController:
@@ -48,7 +54,9 @@ class BrowserController:
         self._page = self._context.new_page()
         return self
 
-    def open(self, url: str, wait_until: str = "domcontentloaded") -> "BrowserController":
+    def open(
+        self, url: str, wait_until: str = "domcontentloaded"
+    ) -> "BrowserController":
         self.page.goto(url, wait_until=wait_until)
         return self
 
