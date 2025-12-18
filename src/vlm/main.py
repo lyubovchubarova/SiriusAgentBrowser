@@ -1,64 +1,37 @@
-import base64
 import os
-import pathlib
+import re
 
 import dotenv
-import openai
+import pydantic
+from agent import VLMAgent
 
 
-class VLMAgent:
-    def __init__(self, token: str, folder_id: str) -> None:
-        if token is None or folder_id is None:
-            raise ValueError("Невалидные данные в .env")
-        self.model = f"gpt://{folder_id}/gemma-3-27b-it/latest"
-        self.client = openai.OpenAI(
-            api_key=token,
-            base_url="https://llm.api.cloud.yandex.net/v1",
-            project=folder_id,
-        )
-        with pathlib.Path("system_prompt.txt").open(encoding="utf8") as file:
-            self.system_prompt = file.read()
+class ClickModel(pydantic.BaseModel):
+    value: str
 
-    def request(self, filename: str, prompt: str) -> str | None:
-        with pathlib.Path(filename).open("rb") as f:
-            image_base64 = base64.b64encode(f.read()).decode("utf-8")
-        image_payload = (
-            f"data:image/{filename[filename.rfind('.') + 1 :]};base64,{image_base64}"
-        )
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": [
-                        {"type": "text", "text": self.system_prompt},
-                    ]
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {"type": "image_url", "image_url": {"url": image_payload}},
-                    ],
-                }
-            ],
-            temperature=0.3,
-            max_tokens=10000,
-        )
-
-        return response.choices[0].message.content
+    @pydantic.field_validator("value")
+    @classmethod
+    def validate_format(cls, v: str) -> str:
+        pattern = r"^:click:(-?\d+):(-?\d+):$"
+        if not re.match(pattern, v):
+            raise ValueError("Строка должна быть в формате :<click>:<x>:<y>:")
+        return v
 
 
 if __name__ == "__main__":
     dotenv.load_dotenv()
     if (
-        os.getenv("YANDEX_GPT_API_TOKEN", None) is None
-        or os.getenv("YANDEX_CLOUD_FOLDER_ID", None) is None
+            os.getenv("YANDEX_GPT_API_TOKEN", None) is None
+            or os.getenv("YANDEX_CLOUD_FOLDER_ID", None) is None
     ):
         raise ValueError("Невалидные данные в .env")
+
     vision_agent: VLMAgent = VLMAgent(
         token=os.getenv("YANDEX_GPT_API_TOKEN", ""),
         folder_id=os.getenv("YANDEX_CLOUD_FOLDER_ID", ""),
     )
-    print(vision_agent.request("C:\\Users\\maxim\\PycharmProjects\\SiriusAgentBrowser\\screenshots\\wiki.png",
-                               "кликни скачать на андроид"))#.encode("cp1251").decode("utf8"))
+    image_url = "C:\\Users\\maxim\\PycharmProjects\\SiriusAgentBrowser\\screenshots\\wiki.png"
+    prompt = "кликни скачать на андроид"
+    response = vision_agent.request(image_url, prompt)
+    print(response)
+    ClickModel.validate_format(response)
