@@ -1,6 +1,8 @@
 import base64
-import dotenv
 import os
+import pathlib
+
+import dotenv
 import openai
 
 
@@ -14,9 +16,11 @@ class VLMAgent:
             base_url="https://llm.api.cloud.yandex.net/v1",
             project=folder_id,
         )
+        with pathlib.Path("system_prompt.txt").open(encoding="utf8") as file:
+            self.system_prompt = file.read()
 
     def request(self, filename: str, prompt: str) -> str | None:
-        with open(filename, "rb") as f:
+        with pathlib.Path(filename).open("rb") as f:
             image_base64 = base64.b64encode(f.read()).decode("utf-8")
         image_payload = (
             f"data:image/{filename[filename.rfind('.') + 1 :]};base64,{image_base64}"
@@ -24,6 +28,12 @@ class VLMAgent:
         response = self.client.chat.completions.create(
             model=self.model,
             messages=[
+                {
+                    "role": "system",
+                    "content": [
+                        {"type": "text", "text": self.system_prompt},
+                    ]
+                },
                 {
                     "role": "user",
                     "content": [
@@ -33,7 +43,7 @@ class VLMAgent:
                 }
             ],
             temperature=0.3,
-            max_tokens=200,
+            max_tokens=10000,
         )
 
         return response.choices[0].message.content
@@ -50,4 +60,5 @@ if __name__ == "__main__":
         token=os.getenv("YANDEX_GPT_API_TOKEN", ""),
         folder_id=os.getenv("YANDEX_CLOUD_FOLDER_ID", ""),
     )
-    print(vision_agent.request("cat.jpg", "привет кто на картинке"))
+    print(vision_agent.request("C:\\Users\\maxim\\PycharmProjects\\SiriusAgentBrowser\\screenshots\\wiki.png",
+                               "кликни скачать на андроид"))#.encode("cp1251").decode("utf8"))
