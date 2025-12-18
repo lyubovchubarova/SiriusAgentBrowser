@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -173,9 +173,9 @@ class BrowserController:
         """
 
         raw = self.page.evaluate(js)
-        data = cast(dict[str, Any], raw)
+        data = cast("dict[str, Any]", raw)
 
-        elements_any = cast(list[dict[str, Any]], data.get("elements", []))
+        elements_any = cast("list[dict[str, Any]]", data.get("elements", []))
         elements = elements_any[:max_elements]
 
         img_path = Path(image_path)
@@ -203,7 +203,7 @@ class BrowserController:
         }
 
         for el in elements:
-            b = cast(dict[str, Any], el.get("bbox", {}))
+            b = cast("dict[str, Any]", el.get("bbox", {}))
             x = float(b.get("x", 0.0))
             y = float(b.get("y", 0.0))
             w = float(b.get("w", 0.0))
