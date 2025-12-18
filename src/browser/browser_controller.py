@@ -3,15 +3,20 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Literal, cast
 
 from PIL import Image, ImageDraw, ImageFont
+from PIL.ImageFont import FreeTypeFont
 from playwright.sync_api import (
     Browser,
     BrowserContext,
     Page,
     Playwright,
+    ViewportSize,
     sync_playwright,
 )
+
+WaitUntil = Literal["commit", "domcontentloaded", "load", "networkidle"]
 
 
 @dataclass
@@ -19,7 +24,7 @@ class BrowserOptions:
     headless: bool = True  # False = окно видно
     browser_name: str = "chromium"  # chromium | firefox | webkit
     slow_mo_ms: int = 0  # для дебага, например 200
-    viewport: dict | None = None  # например {"width": 1280, "height": 720}
+    viewport: ViewportSize | None = None  # {"width": 1280, "height": 720}
 
 
 class BrowserController:
@@ -55,7 +60,9 @@ class BrowserController:
         self._page = self._context.new_page()
         return self
 
-    def open(self, url: str, wait_until: str = "domcontentloaded") -> BrowserController:
+    def open(
+        self, url: str, wait_until: WaitUntil = "domcontentloaded"
+    ) -> BrowserController:
         self.page.goto(url, wait_until=wait_until)
         return self
 
@@ -66,7 +73,6 @@ class BrowserController:
         return str(p)
 
     def close(self) -> None:
-        # закрываем в правильном порядке
         if self._context:
             self._context.close()
             self._context = None
@@ -85,13 +91,12 @@ class BrowserController:
         full_page: bool = True,
         max_elements: int = 400,
         padding: int = 2,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """
         Делает скриншот и рисует bbox + id всех кликабельных элементов.
         Возвращает dict с метаданными.
         """
 
-        # 1) Собираем элементы в браузере
         js = r"""
         () => {
           const selectors = [
@@ -170,71 +175,77 @@ class BrowserController:
         }
         """
 
-        data = self.page.evaluate(js)
+        raw = self.page.evaluate(js)
+        data = cast("dict[str, Any]", raw)
 
-        # Ограничение на случай “страницы-ад”
-        elements = data["elements"][:max_elements]
+        elements_any = cast("list[dict[str, Any]]", data.get("elements", []))
+        elements = elements_any[:max_elements]
 
-        # 2) Скриншот (оригинал)
         img_path = Path(image_path)
         img_path.parent.mkdir(parents=True, exist_ok=True)
         self.page.screenshot(path=str(img_path), full_page=full_page)
 
-        # 3) Рисуем bbox на скрине
-        dpr = float(data.get("devicePixelRatio", 1.0))  # важный множитель
+        dpr = float(data.get("devicePixelRatio", 1.0))
         im = Image.open(str(img_path)).convert("RGBA")
         draw = ImageDraw.Draw(im)
 
-        # Шрифт: пробуем нормальный, иначе дефолт
+        # font: фиксируем тип как "FreeTypeFont | ImageFont"
+        font: FreeTypeFont | ImageFont.ImageFont
         try:
             font = ImageFont.truetype("DejaVuSans.ttf", 14)
         except Exception:
             font = ImageFont.load_default()
 
-        meta = {
+        elements_meta: list[dict[str, Any]] = []
+        meta: dict[str, Any] = {
             "devicePixelRatio": dpr,
             "full_page": full_page,
             "image": str(img_path),
-            "elements": [],
+            "elements": elements_meta,
         }
 
         for el in elements:
-            b = el["bbox"]
-            # bbox в CSS-пикселях -> в пиксели картинки
-            x1 = int((b["x"] - padding) * dpr)
-            y1 = int((b["y"] - padding) * dpr)
-            x2 = int((b["x"] + b["w"] + padding) * dpr)
-            y2 = int((b["y"] + b["h"] + padding) * dpr)
+            b = cast("dict[str, Any]", el.get("bbox", {}))
+            x = float(b.get("x", 0.0))
+            y = float(b.get("y", 0.0))
+            w = float(b.get("w", 0.0))
+            h = float(b.get("h", 0.0))
 
-            # рамка
+            x1 = int((x - padding) * dpr)
+            y1 = int((y - padding) * dpr)
+            x2 = int((x + w + padding) * dpr)
+            y2 = int((y + h + padding) * dpr)
+
             draw.rectangle([x1, y1, x2, y2], outline=(255, 0, 0, 255), width=3)
 
-            # подпись id (плашка)
-            label = el["id"]
-            tw, th = draw.textbbox((0, 0), label, font=font)[2:]
+            label = str(el.get("id", "E?"))
+            tb = draw.textbbox((0, 0), label, font=font)
+            tw = tb[2] - tb[0]
+            th = tb[3] - tb[1]
+
             pad = 4
-            lx1, ly1 = x1, max(0, y1 - th - pad * 2)
-            lx2, ly2 = x1 + tw + pad * 2, ly1 + th + pad * 2
+            lx1 = x1
+            ly1 = max(0, y1 - th - pad * 2)
+            lx2 = x1 + tw + pad * 2
+            ly2 = ly1 + th + pad * 2
+
             draw.rectangle([lx1, ly1, lx2, ly2], fill=(255, 0, 0, 200))
             draw.text(
                 (lx1 + pad, ly1 + pad), label, font=font, fill=(255, 255, 255, 255)
             )
 
-            meta["elements"].append(
+            elements_meta.append(
                 {
-                    "id": el["id"],
-                    "type": el["type"],
-                    "text": el["text"],
-                    "bbox_css": el["bbox"],
+                    "id": label,
+                    "type": str(el.get("type", "")),
+                    "text": str(el.get("text", "")),
+                    "bbox_css": {"x": x, "y": y, "w": w, "h": h},
                     "bbox_px": {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
                 }
             )
 
-        # сохраняем отрисованный скриншот (перезаписываем)
-        im = im.convert("RGB")
-        im.save(str(img_path))
+        im.convert("RGB").save(str(img_path))
 
-        # 4) json мета (опционально)
         if meta_path is None:
             meta_path = str(img_path.with_suffix(".json"))
         mp = Path(meta_path)
