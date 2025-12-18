@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
+import json
 from pathlib import Path
 from typing import Any, Literal, cast
 
 from PIL import Image, ImageDraw, ImageFont
-from PIL.ImageFont import FreeTypeFont
 from playwright.sync_api import (
     Browser,
     BrowserContext,
@@ -21,9 +20,9 @@ WaitUntil = Literal["commit", "domcontentloaded", "load", "networkidle"]
 
 @dataclass
 class BrowserOptions:
-    headless: bool = True  # False = окно видно
-    browser_name: str = "chromium"  # chromium | firefox | webkit
-    slow_mo_ms: int = 0  # для дебага, например 200
+    headless: bool = True              # False = окно видно
+    browser_name: str = "chromium"     # chromium | firefox | webkit
+    slow_mo_ms: int = 0                # для дебага, например 200
     viewport: ViewportSize | None = None  # {"width": 1280, "height": 720}
 
 
@@ -60,9 +59,7 @@ class BrowserController:
         self._page = self._context.new_page()
         return self
 
-    def open(
-        self, url: str, wait_until: WaitUntil = "domcontentloaded"
-    ) -> BrowserController:
+    def open(self, url: str, wait_until: WaitUntil = "domcontentloaded") -> BrowserController:
         self.page.goto(url, wait_until=wait_until)
         return self
 
@@ -176,9 +173,9 @@ class BrowserController:
         """
 
         raw = self.page.evaluate(js)
-        data = cast("dict[str, Any]", raw)
+        data = cast(dict[str, Any], raw)
 
-        elements_any = cast("list[dict[str, Any]]", data.get("elements", []))
+        elements_any = cast(list[dict[str, Any]], data.get("elements", []))
         elements = elements_any[:max_elements]
 
         img_path = Path(image_path)
@@ -189,12 +186,12 @@ class BrowserController:
         im = Image.open(str(img_path)).convert("RGBA")
         draw = ImageDraw.Draw(im)
 
-        # font: фиксируем тип как "FreeTypeFont | ImageFont"
-        font: FreeTypeFont | ImageFont.ImageFont
+        # PIL types conflict in stubs; keep runtime clean and keep mypy quiet
         try:
             font = ImageFont.truetype("DejaVuSans.ttf", 14)
         except Exception:
             font = ImageFont.load_default()
+        font_any = cast(Any, font)
 
         elements_meta: list[dict[str, Any]] = []
         meta: dict[str, Any] = {
@@ -205,7 +202,7 @@ class BrowserController:
         }
 
         for el in elements:
-            b = cast("dict[str, Any]", el.get("bbox", {}))
+            b = cast(dict[str, Any], el.get("bbox", {}))
             x = float(b.get("x", 0.0))
             y = float(b.get("y", 0.0))
             w = float(b.get("w", 0.0))
@@ -219,7 +216,8 @@ class BrowserController:
             draw.rectangle([x1, y1, x2, y2], outline=(255, 0, 0, 255), width=3)
 
             label = str(el.get("id", "E?"))
-            tb = draw.textbbox((0, 0), label, font=font)
+
+            tb = draw.textbbox((0, 0), label, font=font_any)
             tw = tb[2] - tb[0]
             th = tb[3] - tb[1]
 
@@ -230,9 +228,7 @@ class BrowserController:
             ly2 = ly1 + th + pad * 2
 
             draw.rectangle([lx1, ly1, lx2, ly2], fill=(255, 0, 0, 200))
-            draw.text(
-                (lx1 + pad, ly1 + pad), label, font=font, fill=(255, 255, 255, 255)
-            )
+            draw.text((lx1 + pad, ly1 + pad), label, font=font_any, fill=(255, 255, 255, 255))
 
             elements_meta.append(
                 {
