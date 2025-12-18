@@ -186,12 +186,13 @@ class BrowserController:
         im = Image.open(str(img_path)).convert("RGBA")
         draw = ImageDraw.Draw(im)
 
-        # PIL types conflict in stubs; keep runtime clean and keep mypy quiet
+        # FIX 1: без FreeTypeFont, чтобы ruff TC002 не ругался
+        # FIX 2: font = Any, чтобы mypy не ругался на union типов из PIL
+        font: Any
         try:
             font = ImageFont.truetype("DejaVuSans.ttf", 14)
         except Exception:
             font = ImageFont.load_default()
-        font_any = cast(Any, font)
 
         elements_meta: list[dict[str, Any]] = []
         meta: dict[str, Any] = {
@@ -216,8 +217,7 @@ class BrowserController:
             draw.rectangle([x1, y1, x2, y2], outline=(255, 0, 0, 255), width=3)
 
             label = str(el.get("id", "E?"))
-
-            tb = draw.textbbox((0, 0), label, font=font_any)
+            tb = draw.textbbox((0, 0), label, font=font)
             tw = tb[2] - tb[0]
             th = tb[3] - tb[1]
 
@@ -228,7 +228,7 @@ class BrowserController:
             ly2 = ly1 + th + pad * 2
 
             draw.rectangle([lx1, ly1, lx2, ly2], fill=(255, 0, 0, 200))
-            draw.text((lx1 + pad, ly1 + pad), label, font=font_any, fill=(255, 255, 255, 255))
+            draw.text((lx1 + pad, ly1 + pad), label, font=font, fill=(255, 255, 255, 255))
 
             elements_meta.append(
                 {
