@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pydantic import ValidationError
 from openai import OpenAI
 
-from models import Plan
+from .models import Plan
 
 
 SYSTEM_PROMPT = """
@@ -50,7 +50,9 @@ def extract_json(text: str) -> str:
     1) ```json ... ```
     2) first {...} block
     """
-    fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL | re.IGNORECASE)
+    fenced = re.search(
+        r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL | re.IGNORECASE
+    )
     if fenced:
         return fenced.group(1)
 
