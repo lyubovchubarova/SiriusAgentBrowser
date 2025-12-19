@@ -74,6 +74,39 @@ class BrowserController:
         self.page.screenshot(path=str(p), full_page=not viewport_only)
         return str(p)
 
+    def get_accessibility_tree(self) -> str:
+        """
+        Returns a simplified text representation of the accessibility tree.
+        Useful for LLM planning.
+        """
+        try:
+            snapshot = self.page.accessibility.snapshot()
+
+            def process_node(node, depth=0):
+                indent = "  " * depth
+                role = node.get("role", "unknown")
+                name = node.get("name", "")
+                text = f"{indent}- [{role}] {name}"
+
+                children = node.get("children", [])
+                # Limit depth and children to avoid huge prompts
+                if depth > 5:
+                    return text
+
+                child_texts = []
+                for child in children[:20]:  # Limit siblings
+                    child_texts.append(process_node(child, depth + 1))
+
+                if child_texts:
+                    return text + "\n" + "\n".join(child_texts)
+                return text
+
+            if snapshot:
+                return process_node(snapshot)
+            return "Accessibility tree empty"
+        except Exception as e:
+            return f"Error getting accessibility tree: {e}"
+
     def screenshot_with_bboxes(
         self,
         image_path: str,
@@ -310,7 +343,11 @@ class BrowserController:
                 locator.fill("", timeout=timeout_ms)
             except Exception:
                 # если fill не поддерживается (редко), чистим через Ctrl/Command+A + Backspace
-                mod = "Meta" if self.page.evaluate("() => navigator.platform.includes('Mac')") else "Control"
+                mod = (
+                    "Meta"
+                    if self.page.evaluate("() => navigator.platform.includes('Mac')")
+                    else "Control"
+                )
                 self.page.keyboard.press(f"{mod}+A")
                 self.page.keyboard.press("Backspace")
 
@@ -424,4 +461,3 @@ class BrowserController:
         }
         """
         return self.page.evaluate(js, max_elements)
-

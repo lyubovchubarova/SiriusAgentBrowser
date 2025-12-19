@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-Action = Literal["navigate", "click", "type", "scroll", "extract"]
+Action = Literal["navigate", "click", "type", "scroll", "extract", "hover"]
 
 
 class Step(BaseModel):
@@ -13,6 +13,7 @@ class Step(BaseModel):
 
 
 class Plan(BaseModel):
+    reasoning: str = Field(..., description="Chain-of-thought reasoning for the plan")
     task: str = Field(..., min_length=3, max_length=200)
     steps: list[Step] = Field(..., min_length=1, max_length=10)  # <= 10 шагов
     estimated_time: int = Field(..., ge=1, le=60 * 60)  # seconds
@@ -22,8 +23,16 @@ class Plan(BaseModel):
         ids = [s.step_id for s in self.steps]
         if len(set(ids)) != len(ids):
             raise ValueError("Duplicate step_id in steps")
-        # требуем 1..n
-        expected = list(range(1, len(self.steps) + 1))
-        if sorted(ids) != expected:
-            raise ValueError(f"step_id must be 1..{len(self.steps)} without gaps")
+
+        if not ids:
+            return self
+
+        sorted_ids = sorted(ids)
+        start = sorted_ids[0]
+        expected = list(range(start, start + len(self.steps)))
+
+        if sorted_ids != expected:
+            raise ValueError(
+                f"step_id must be sequential without gaps (got {sorted_ids}, expected {expected})"
+            )
         return self

@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import time
 from dataclasses import dataclass
 
 from pydantic import ValidationError
@@ -17,13 +18,25 @@ Return ONLY valid JSON. No code fences. No commentary.
 Hard constraints:
 - steps length MUST be <= 10. If task is complex, merge steps.
 - step_id must start from 1 and increase by 1 without gaps.
-- action must be exactly one of: navigate, click, type, scroll, extract.
+- action must be exactly one of: navigate, click, type, scroll, extract, hover.
 - description: short, clear, imperative, one action. For 'navigate', MUST include the full URL (e.g., https://wikipedia.org).
 - expected_result: concrete visible outcome.
 - estimated_time: integer seconds.
 
+Strategies for complex pages:
+- If the target is inside a carousel or horizontal list, add a step to click the "Next", "Right Arrow", or ">" button.
+- If the page seems stuck or empty, try to "scroll" to trigger lazy loading.
+- If a popup/modal blocks the view, add a step to click "Close", "X", or "Not now".
+- If a menu is hidden, try to "hover" over the parent element to reveal it.
+
+CRITICAL NAVIGATION RULES:
+- If you don't know the exact URL, do NOT guess. Navigate to a search engine (https://google.com) and search.
+- If you are on a search results page (Google, Yandex, etc.), DO NOT use 'navigate' to go to the target site. Use 'click' to select the relevant result.
+- If the previous step resulted in a "fallback search", your next step MUST be to 'click' on a result.
+
 Schema:
 {
+  "reasoning": string, // Explain your thought process here. Why did you choose these steps? What is the strategy?
   "task": string,
   "steps": [
     {
@@ -42,6 +55,9 @@ Schema:
 class PlannerError(Exception):
     message: str
     raw_output: str = ""
+
+    def __str__(self):
+        return f"{self.message} (Raw: {self.raw_output[:200]}...)"
 
 
 def extract_json(text: str) -> str:
@@ -156,18 +172,24 @@ class Planner:
         last_raw = ""
         last_err = ""
 
-        for attempt in range(1, 3):  # 1 + 1 ретрай
-            extra = None
+        for attempt in range(1, 4):  # Increased to 3 attempts
             if attempt > 1:
+                time.sleep(2)  # Wait a bit before retry
                 extra = (
                     "Fix the previous output.\n"
                     "Return ONLY corrected JSON.\n"
                     f"Validation/parsing error:\n{last_err}\n"
                     f"Previous raw output:\n{last_raw}\n"
                 )
+            else:
+                extra = None
 
-            raw_text = self._ask_llm(user_prompt, extra_user_text=extra)
-            last_raw = raw_text
+            try:
+                raw_text = self._ask_llm(user_prompt, extra_user_text=extra)
+                last_raw = raw_text
+            except Exception as e:
+                last_err = f"LLM API Error: {e}"
+                continue
 
             try:
                 json_text = extract_json(raw_text)
@@ -189,6 +211,6 @@ class Planner:
                 continue
 
         raise PlannerError(
-            message=f"Failed to build a valid plan after 2 attempts. Last error: {last_err}. Raw output: {last_raw}",
+            message=f"Failed to build a valid plan after 3 attempts. Last error: {last_err}. Raw output: {last_raw}",
             raw_output=last_raw,
         )

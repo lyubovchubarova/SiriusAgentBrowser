@@ -123,13 +123,21 @@ class Orchestrator:
                     elements = dom_data.get("elements", [])
 
                     # Format elements for LLM
-                    # Limit to top 50 elements to save context
+                    # Limit to top 100 elements to save context
                     formatted_elements = []
-                    for el in elements[:50]:
+                    for el in elements[:100]:
                         formatted_elements.append(
                             f"[{el['id']}] {el['type']} \"{el['text']}\""
                         )
                     dom_str = "\n".join(formatted_elements)
+
+                    # Add Accessibility Tree for better context
+                    ax_tree = self.browser_controller.get_accessibility_tree()
+                    # Limit tree size roughly
+                    if len(ax_tree) > 8000:
+                        ax_tree = ax_tree[:8000] + "...(truncated)"
+
+                    dom_str += f"\n\nAccessibility Tree (Semantic View):\n{ax_tree}"
 
                     current_url = page.url
                 except Exception as e:
@@ -138,27 +146,43 @@ class Orchestrator:
                     current_url = "unknown"
 
                 # Prepare history string for planner
-                # Take last 5 steps
+                # Take last 20 steps to provide better context and avoid loops
                 history_str = ""
-                recent_history = execution_history[-5:]
+                recent_history = execution_history[-20:]
+                start_idx = max(1, len(execution_history) - 19)
                 for i, h in enumerate(recent_history):
-                    history_str += f"- Step {i+1}: {h['description']} (Action: {h['action']}) -> Result: {h['result']}\n"
+                    history_str += f"- Step {start_idx + i}: {h['description']} (Action: {h['action']}) -> Result: {h['result']}\n"
 
                 # Simple cycle detection
                 # If the exact same action description and result happened in the last 3 steps (excluding current), warn
                 cycle_warning = ""
                 if len(execution_history) > 1:
                     last_entry = execution_history[-1]
-                    # Check previous entries
-                    for prev in execution_history[:-1][
-                        -3:
-                    ]:  # Look at last 3 before current
-                        if (
-                            prev["description"] == last_entry["description"]
-                            and prev["result"] == last_entry["result"]
-                        ):
-                            cycle_warning = "WARNING: It seems you are repeating the same action with the same result. You MUST try a different approach."
-                            break
+
+                    # Check for repeated failures
+                    if "Failed" in last_entry["result"]:
+                        fail_count = 0
+                        for h in execution_history[-3:]:
+                            if (
+                                "Failed" in h["result"]
+                                and h["description"] == last_entry["description"]
+                            ):
+                                fail_count += 1
+
+                        if fail_count >= 2:
+                            cycle_warning = "CRITICAL: You are repeatedly failing with the same action. You MUST change strategy. Do NOT try the same action again."
+
+                    # Check previous entries for exact duplicates
+                    if not cycle_warning:
+                        for prev in execution_history[:-1][
+                            -3:
+                        ]:  # Look at last 3 before current
+                            if (
+                                prev["description"] == last_entry["description"]
+                                and prev["result"] == last_entry["result"]
+                            ):
+                                cycle_warning = "WARNING: It seems you are repeating the same action with the same result. You MUST try a different approach."
+                                break
 
                 if cycle_warning:
                     history_str += f"\n{cycle_warning}"
@@ -170,6 +194,10 @@ class Orchestrator:
                         "Action failed: No target found. Triggering full replan strategy."
                     )
                     result += " (CRITICAL FAILURE: The target element was NOT found. The previous plan is invalid. You MUST generate a completely NEW plan using a different strategy, e.g., use a search engine, go to the homepage, or use a different selector.)"
+
+                # Special handling for Search Fallback Loop
+                if "You are now on the search results page" in result:
+                    result += " (CRITICAL INSTRUCTION: You are on a search results page. The previous 'navigate' action was converted to a search. DO NOT use 'navigate' again. Your next action MUST be 'click' to select a result from the list.)"
 
                 # Replan
                 logger.info("Replanning based on new state...")
@@ -203,7 +231,7 @@ class Orchestrator:
                     logger.info(f"New plan: {len(plan.steps)} steps")
 
                 except Exception as e:
-                    logger.error(f"Replanning failed: {e}")
+                    logger.error(f"Replanning failed: {e}", exc_info=True)
                     break
                     # If replan fails, we are stuck.
                     break

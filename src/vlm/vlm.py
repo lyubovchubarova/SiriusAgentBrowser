@@ -1,7 +1,9 @@
 import time
 import re
+import os
 from playwright.sync_api import Page
 from src.planner.models import Step
+from src.vlm.agent import VLMAgent as RealVLMAgent
 
 
 class VisionAgent:
@@ -10,7 +12,71 @@ class VisionAgent:
     """
 
     def __init__(self):
-        pass
+        # Initialize the real VLM agent
+        # We try to get credentials from env, but don't crash if missing
+        self.vlm = RealVLMAgent()
+
+    def _mark_page(self, page: Page):
+        """
+        Injects JavaScript to draw numbered boxes on interactive elements (Set-of-Marks).
+        """
+        js_code = """
+        (function() {
+            // Remove existing marks
+            document.querySelectorAll('.som-marker').forEach(e => e.remove());
+            window.som_elements = {};
+
+            let id = 1;
+            // Select interactive elements
+            const items = document.querySelectorAll('a, button, input, textarea, select, [role="button"], [role="link"]');
+            
+            items.forEach(el => {
+                const rect = el.getBoundingClientRect();
+                if (rect.width > 0 && rect.height > 0 && window.getComputedStyle(el).visibility !== 'hidden') {
+                    // Check if in viewport
+                    if (rect.top >= 0 && rect.left >= 0 && rect.bottom <= window.innerHeight && rect.right <= window.innerWidth) {
+                        
+                        const marker = document.createElement('div');
+                        marker.className = 'som-marker';
+                        marker.textContent = id;
+                        marker.style.position = 'fixed';
+                        marker.style.left = rect.left + 'px';
+                        marker.style.top = rect.top + 'px';
+                        marker.style.backgroundColor = '#FFD700'; // Gold
+                        marker.style.color = 'black';
+                        marker.style.border = '2px solid #FF0000'; // Red
+                        marker.style.fontSize = '14px';
+                        marker.style.fontWeight = 'bold';
+                        marker.style.zIndex = '2147483647'; // Max z-index
+                        marker.style.padding = '2px';
+                        marker.style.borderRadius = '4px';
+                        marker.style.boxShadow = '0 0 2px white';
+                        marker.style.pointerEvents = 'none'; // Click through
+                        
+                        document.body.appendChild(marker);
+                        window.som_elements[id] = el;
+                        id++;
+                    }
+                }
+            });
+            return id - 1; // Return count
+        })()
+        """
+        try:
+            count = page.evaluate(js_code)
+            print(f"SoM: Marked {count} elements.")
+            return count
+        except Exception as e:
+            print(f"SoM marking failed: {e}")
+            return 0
+
+    def _unmark_page(self, page: Page):
+        try:
+            page.evaluate(
+                "document.querySelectorAll('.som-marker').forEach(e => e.remove());"
+            )
+        except:
+            pass
 
     def verify_step(
         self, step: Step, page: Page, execution_result: str
@@ -24,9 +90,24 @@ class VisionAgent:
         if "Error" in execution_result:
             return False, f"Execution failed: {execution_result}"
 
-        # Здесь должна быть логика VLM: отправка скриншота и вопроса "Соответствует ли состояние expected_result?"
-        # Пока используем эвристики.
+        # Use VLM for verification if possible
+        try:
+            screenshot_path = "screenshots/verify_step.png"
+            page.screenshot(path=screenshot_path)
 
+            # Only use VLM if configured (client exists)
+            if self.vlm.client:
+                success, reason = self.vlm.verify_state(
+                    screenshot_path, step.expected_result
+                )
+                print(f"VLM Verification: {success} - {reason}")
+                # We trust VLM, but if it fails (e.g. API error), we fall back to heuristics
+                if "Error calling VLM" not in reason:
+                    return success, reason
+        except Exception as e:
+            print(f"VLM verification failed: {e}")
+
+        # Fallback heuristics
         try:
             if step.action == "navigate":
                 # Проверяем, что URL изменился или содержит ожидаемую часть
@@ -71,11 +152,22 @@ class VisionAgent:
         try:
             if step.action == "navigate":
                 # Пытаемся найти URL в описании
-                url_match = re.search(r"https?://\S+", step.description)
+                # Improved regex to catch www. and domains without protocol
+                url_match = re.search(r"(https?://|www\.)\S+", step.description)
                 if url_match:
                     url = url_match.group(0)
-                    page.goto(url)
-                    return f"Navigated to {url}"
+                    if url.startswith("www."):
+                        url = "https://" + url
+
+                    # Basic validation
+                    if "." not in url:
+                        return f"Failed to navigate: Invalid URL '{url}'"
+
+                    try:
+                        page.goto(url, timeout=30000)
+                        return f"Navigated to {url}"
+                    except Exception as e:
+                        return f"Failed to navigate to {url}: {e}"
 
                 # Эвристика для Википедии, если URL не найден
                 if (
@@ -94,6 +186,29 @@ class VisionAgent:
                     url = "https://habr.com/ru/all/"
                     page.goto(url)
                     return f"Navigated to {url} (heuristic)"
+
+                # Fallback: Google Search if description implies searching or visiting a site
+                # e.g. "Go to Pinterest" -> search pinterest
+                # If we reached here, no URL was found and no specific heuristic matched.
+                # We treat the description as a search query.
+
+                query = step.description
+                # Clean up common prefixes
+                for prefix in [
+                    "go to",
+                    "перейти на",
+                    "перейти",
+                    "navigate to",
+                    "open",
+                    "открыть",
+                ]:
+                    if prefix in query.lower():
+                        query = re.sub(f"(?i){prefix}", "", query).strip()
+
+                if query:
+                    search_url = f"https://www.google.com/search?q={query}"
+                    page.goto(search_url)
+                    return f"Navigated to Google Search for '{query}'. You are now on the search results page. DO NOT navigate again. CLICK on a relevant result link."
 
                 return "Failed to navigate: No URL found"
 
@@ -142,7 +257,11 @@ class VisionAgent:
 
                 if search_input:
                     try:
+                        # Check if we already typed this text recently to avoid loops
+                        # This is a local check, orchestrator handles global cycles
+
                         search_input.click()
+                        search_input.fill("")  # Clear first
                         search_input.type(text_to_type, delay=100)
                         page.keyboard.press("Enter")
                         time.sleep(3)
@@ -229,6 +348,37 @@ class VisionAgent:
                     except:
                         pass
 
+                # Heuristic for "Next" / "Arrow" buttons (Carousels)
+                if (
+                    "next" in step.description.lower()
+                    or "arrow" in step.description.lower()
+                    or "right" in step.description.lower()
+                    or "далее" in step.description.lower()
+                    or "вправо" in step.description.lower()
+                ):
+                    try:
+                        # Common selectors for carousels/sliders
+                        selectors = [
+                            "button[aria-label*='next']",
+                            "button[aria-label*='Next']",
+                            "button[class*='next']",
+                            "button[class*='arrow']",
+                            "div[class*='arrow-right']",
+                            "svg[class*='arrow']",
+                            "[aria-label='Next']",
+                            ".slick-next",
+                            ".swiper-button-next",
+                        ]
+                        for sel in selectors:
+                            if page.locator(sel).first.is_visible():
+                                page.locator(sel).first.click()
+                                time.sleep(1)
+                                return (
+                                    f"Clicked next/arrow button using selector '{sel}'"
+                                )
+                    except:
+                        pass
+
                 if target_text:
                     try:
                         # Try to find the element
@@ -285,7 +435,124 @@ class VisionAgent:
                     except Exception as e:
                         return f"Error finding/clicking '{target_text}': {e}"
 
+                # If text/selector based click failed, try VLM click
+                if self.vlm.client:
+                    print("Trying VLM visual click...")
+
+                    # Retry loop for VLM click (scroll and retry)
+                    for attempt in range(2):
+                        try:
+                            # 1. Mark elements
+                            self._mark_page(page)
+
+                            # 2. Screenshot
+                            screenshot_path = "screenshots/click_target.png"
+                            page.screenshot(path=screenshot_path)
+
+                            # 3. Unmark (optional, but cleaner for user)
+                            self._unmark_page(page)
+
+                            # 4. Ask VLM for ID
+                            vlm_resp = self.vlm.get_target_id(
+                                screenshot_path, step.description
+                            )
+                            print(f"VLM SoM Response (Attempt {attempt+1}): {vlm_resp}")
+
+                            if ":not_found:" in vlm_resp:
+                                print("VLM did not find the target. Scrolling down...")
+                                page.mouse.wheel(0, 500)
+                                time.sleep(2)
+                                continue
+
+                            # 5. Parse :id:N:
+                            match = re.search(r":id:(\d+):", vlm_resp)
+                            if match:
+                                el_id = int(match.group(1))
+
+                                # 6. Click element by ID using JS
+                                js_click = f"""
+                                (function() {{
+                                    const el = window.som_elements[{el_id}];
+                                    if (el) {{
+                                        el.scrollIntoView({{block: 'center', inline: 'center'}});
+                                        return true;
+                                    }}
+                                    return false;
+                                }})()
+                                """
+                                found = page.evaluate(js_click)
+
+                                if found:
+                                    try:
+                                        handle = page.evaluate_handle(
+                                            f"window.som_elements[{el_id}]"
+                                        )
+                                        if handle:
+                                            handle.as_element().click()
+                                            time.sleep(2)
+                                            return f"Clicked element #{el_id} using VLM SoM"
+                                    except Exception as e_click:
+                                        print(
+                                            f"Playwright click failed: {e_click}. Trying JS click..."
+                                        )
+                                        page.evaluate(
+                                            f"window.som_elements[{el_id}].click()"
+                                        )
+                                        time.sleep(2)
+                                        return f"Clicked element #{el_id} using JS fallback"
+                                else:
+                                    print(f"Element #{el_id} not found in JS map.")
+
+                        except Exception as e:
+                            print(f"VLM SoM click failed: {e}")
+
+                    return "Failed to click: VLM could not find target after scrolling"
+
                 return "Failed to click: No target found"
+
+            elif step.action == "hover":
+                # Logic similar to click, but using hover()
+                target_text = None
+                match = re.search(r"['\"](.*?)['\"]", step.description)
+                if match:
+                    target_text = match.group(1)
+
+                if target_text:
+                    try:
+                        element = page.get_by_text(target_text).first
+                        if element.is_visible():
+                            element.hover()
+                            time.sleep(1)
+                            return f"Hovered over '{target_text}'"
+                    except:
+                        pass
+
+                # Fallback to VLM SoM for hover
+                if self.vlm.client:
+                    print("Trying VLM visual hover (Set-of-Marks)...")
+                    try:
+                        self._mark_page(page)
+                        screenshot_path = "screenshots/hover_target.png"
+                        page.screenshot(path=screenshot_path)
+                        self._unmark_page(page)
+
+                        vlm_resp = self.vlm.get_target_id(
+                            screenshot_path, step.description
+                        )
+                        match = re.search(r":id:(\d+):", vlm_resp)
+                        if match:
+                            el_id = int(match.group(1))
+                            handle = page.evaluate_handle(
+                                f"window.som_elements[{el_id}]"
+                            )
+                            if handle:
+                                handle.as_element().hover()
+                                time.sleep(1)
+                                return f"Hovered over element #{el_id} using VLM SoM"
+                    except Exception as e:
+                        print(f"VLM hover failed: {e}")
+
+                return "Failed to hover"
 
             elif step.action == "scroll":
                 page.mouse.wheel(0, 500)
@@ -293,7 +560,20 @@ class VisionAgent:
                 return "Scrolled down"
 
             elif step.action == "extract":
-                # Логика извлечения информации
+                # 1. Try VLM extraction first (Smart Extraction)
+                if self.vlm.client:
+                    try:
+                        screenshot_path = "screenshots/extract_source.png"
+                        page.screenshot(path=screenshot_path)
+
+                        extraction_result = self.vlm.extract_data(
+                            screenshot_path, step.description
+                        )
+                        return f"VLM Extracted Data: {extraction_result}"
+                    except Exception as e:
+                        print(f"VLM extraction failed: {e}")
+
+                # 2. Fallback to text extraction
                 try:
                     # Если просят заголовок
                     if (
