@@ -3,19 +3,10 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Optional
 
 from PIL import Image, ImageDraw, ImageFont
-from playwright.sync_api import (
-    Browser,
-    BrowserContext,
-    Page,
-    Playwright,
-    ViewportSize,
-    sync_playwright,
-)
-
-WaitUntil = Literal["commit", "domcontentloaded", "load", "networkidle"]
+from playwright.sync_api import sync_playwright, Playwright, Browser, BrowserContext, Page
 
 
 @dataclass
@@ -23,16 +14,16 @@ class BrowserOptions:
     headless: bool = True              # False = окно видно
     browser_name: str = "chromium"     # chromium | firefox | webkit
     slow_mo_ms: int = 0                # для дебага, например 200
-    viewport: ViewportSize | None = None  # {"width": 1280, "height": 720}
+    viewport: Optional[dict] = None    # {"width": 1280, "height": 720}
 
 
 class BrowserController:
     def __init__(self, options: BrowserOptions | None = None):
         self.options = options or BrowserOptions()
-        self._pw: Playwright | None = None
-        self._browser: Browser | None = None
-        self._context: BrowserContext | None = None
-        self._page: Page | None = None
+        self._pw: Optional[Playwright] = None
+        self._browser: Optional[Browser] = None
+        self._context: Optional[BrowserContext] = None
+        self._page: Optional[Page] = None
 
     @property
     def page(self) -> Page:
@@ -40,7 +31,7 @@ class BrowserController:
             raise RuntimeError("Browser is not started. Call start() first.")
         return self._page
 
-    def start(self) -> BrowserController:
+    def start(self) -> "BrowserController":
         if self._browser:
             return self
 
@@ -59,39 +50,26 @@ class BrowserController:
         self._page = self._context.new_page()
         return self
 
-    def open(self, url: str, wait_until: WaitUntil = "domcontentloaded") -> BrowserController:
+    def open(self, url: str, wait_until: str = "domcontentloaded") -> "BrowserController":
         self.page.goto(url, wait_until=wait_until)
         return self
 
-    def screenshot(self, path: str, full_page: bool = True) -> str:
+    def screenshot(self, path: str, viewport_only: bool = True) -> str:
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
-        self.page.screenshot(path=str(p), full_page=full_page)
+        self.page.screenshot(path=str(p), full_page=not viewport_only)
         return str(p)
-
-    def close(self) -> None:
-        if self._context:
-            self._context.close()
-            self._context = None
-        if self._browser:
-            self._browser.close()
-            self._browser = None
-        if self._pw:
-            self._pw.stop()
-            self._pw = None
-        self._page = None
 
     def screenshot_with_bboxes(
         self,
         image_path: str,
         meta_path: str | None = None,
-        full_page: bool = True,
         max_elements: int = 400,
         padding: int = 2,
-    ) -> dict[str, Any]:
+    ) -> dict:
         """
-        Делает скриншот и рисует bbox + id всех кликабельных элементов.
-        Возвращает dict с метаданными.
+        Скриншот ТОЛЬКО видимой части (viewport) + bbox кликабельных элементов + id.
+        Сохраняет картинку и json с метаданными.
         """
 
         js = r"""
@@ -118,9 +96,11 @@ class BrowserController:
 
             const r = el.getBoundingClientRect();
             if (r.width < 2 || r.height < 2) return false;
-            if (r.bottom < 0 || r.right < 0) return false;
-            if (r.top > (window.innerHeight || document.documentElement.clientHeight)) return false;
-            if (r.left > (window.innerWidth || document.documentElement.clientWidth)) return false;
+
+            // строго в пределах viewport (мы рисуем только по видимой части)
+            if (r.bottom <= 0 || r.right <= 0) return false;
+            if (r.top >= window.innerHeight || r.left >= window.innerWidth) return false;
+
             return true;
           };
 
@@ -140,10 +120,14 @@ class BrowserController:
           const getText = (el) => {
             const tag = el.tagName.toLowerCase();
             if (tag === 'input' || tag === 'textarea') {
-              return (el.getAttribute('placeholder') || el.getAttribute('aria-label') || el.value || '').trim().slice(0, 80);
+              return (el.getAttribute('placeholder') || el.getAttribute('aria-label') || el.value || '')
+                .trim().slice(0, 80);
             }
-            return (el.innerText || el.textContent || el.getAttribute('aria-label') || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+            return (el.innerText || el.textContent || el.getAttribute('aria-label') || '')
+              .trim().replace(/\s+/g, ' ').slice(0, 80);
           };
+
+          const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
           const out = [];
           let idx = 1;
@@ -151,6 +135,17 @@ class BrowserController:
             if (!isVisible(el)) continue;
 
             const r = el.getBoundingClientRect();
+
+            // обрезаем bbox границами viewport, чтобы не рисовать за пределами
+            const x = clamp(r.x, 0, window.innerWidth);
+            const y = clamp(r.y, 0, window.innerHeight);
+            const x2 = clamp(r.x + r.width, 0, window.innerWidth);
+            const y2 = clamp(r.y + r.height, 0, window.innerHeight);
+
+            const w = x2 - x;
+            const h = y2 - y;
+            if (w < 2 || h < 2) continue;
+
             const id = `E${idx++}`;
             el.dataset.pwBboxId = id;
 
@@ -158,7 +153,7 @@ class BrowserController:
               id,
               type: getType(el),
               text: getText(el),
-              bbox: { x: r.x, y: r.y, w: r.width, h: r.height }
+              bbox: { x, y, w, h }
             });
 
             if (out.length >= 2000) break;
@@ -172,73 +167,76 @@ class BrowserController:
         }
         """
 
-        raw = self.page.evaluate(js)
-        data = cast("dict[str, Any]", raw)
-
-        elements_any = cast("list[dict[str, Any]]", data.get("elements", []))
-        elements = elements_any[:max_elements]
+        data = self.page.evaluate(js)
+        elements = data["elements"][:max_elements]
 
         img_path = Path(image_path)
         img_path.parent.mkdir(parents=True, exist_ok=True)
-        self.page.screenshot(path=str(img_path), full_page=full_page)
+
+        # ВАЖНО: только viewport
+        self.page.screenshot(path=str(img_path), full_page=False)
 
         dpr = float(data.get("devicePixelRatio", 1.0))
         im = Image.open(str(img_path)).convert("RGBA")
         draw = ImageDraw.Draw(im)
 
-        # FIX 1: без FreeTypeFont, чтобы ruff TC002 не ругался
-        # FIX 2: font = Any, чтобы mypy не ругался на union типов из PIL
-        font: Any
         try:
             font = ImageFont.truetype("DejaVuSans.ttf", 14)
         except Exception:
             font = ImageFont.load_default()
 
-        elements_meta: list[dict[str, Any]] = []
-        meta: dict[str, Any] = {
+        meta = {
             "devicePixelRatio": dpr,
-            "full_page": full_page,
+            "viewport_only": True,
             "image": str(img_path),
-            "elements": elements_meta,
+            "viewport": data.get("viewport"),
+            "elements": [],
         }
 
-        for el in elements:
-            b = cast("dict[str, Any]", el.get("bbox", {}))
-            x = float(b.get("x", 0.0))
-            y = float(b.get("y", 0.0))
-            w = float(b.get("w", 0.0))
-            h = float(b.get("h", 0.0))
+        def clamp_px(v: int, lo: int, hi: int) -> int:
+            return max(lo, min(hi, v))
 
-            x1 = int((x - padding) * dpr)
-            y1 = int((y - padding) * dpr)
-            x2 = int((x + w + padding) * dpr)
-            y2 = int((y + h + padding) * dpr)
+        W, H = im.size
+
+        for el in elements:
+            b = el["bbox"]
+
+            x1 = int((b["x"] - padding) * dpr)
+            y1 = int((b["y"] - padding) * dpr)
+            x2 = int((b["x"] + b["w"] + padding) * dpr)
+            y2 = int((b["y"] + b["h"] + padding) * dpr)
+
+            # на всякий случай ограничим рамки размерами изображения
+            x1 = clamp_px(x1, 0, W - 1)
+            y1 = clamp_px(y1, 0, H - 1)
+            x2 = clamp_px(x2, 0, W - 1)
+            y2 = clamp_px(y2, 0, H - 1)
+            if x2 <= x1 or y2 <= y1:
+                continue
 
             draw.rectangle([x1, y1, x2, y2], outline=(255, 0, 0, 255), width=3)
 
-            label = str(el.get("id", "E?"))
+            label = el["id"]
+            # textbbox returns (l,t,r,b)
             tb = draw.textbbox((0, 0), label, font=font)
-            tw = tb[2] - tb[0]
-            th = tb[3] - tb[1]
-
+            tw, th = tb[2] - tb[0], tb[3] - tb[1]
             pad = 4
+
             lx1 = x1
             ly1 = max(0, y1 - th - pad * 2)
-            lx2 = x1 + tw + pad * 2
-            ly2 = ly1 + th + pad * 2
+            lx2 = clamp_px(x1 + tw + pad * 2, 0, W - 1)
+            ly2 = clamp_px(ly1 + th + pad * 2, 0, H - 1)
 
             draw.rectangle([lx1, ly1, lx2, ly2], fill=(255, 0, 0, 200))
             draw.text((lx1 + pad, ly1 + pad), label, font=font, fill=(255, 255, 255, 255))
 
-            elements_meta.append(
-                {
-                    "id": label,
-                    "type": str(el.get("type", "")),
-                    "text": str(el.get("text", "")),
-                    "bbox_css": {"x": x, "y": y, "w": w, "h": h},
-                    "bbox_px": {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
-                }
-            )
+            meta["elements"].append({
+                "id": el["id"],
+                "type": el["type"],
+                "text": el["text"],
+                "bbox_css": el["bbox"],
+                "bbox_px": {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
+            })
 
         im.convert("RGB").save(str(img_path))
 
@@ -249,3 +247,15 @@ class BrowserController:
         mp.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
         return meta
+
+    def close(self) -> None:
+        if self._context:
+            self._context.close()
+            self._context = None
+        if self._browser:
+            self._browser.close()
+            self._browser = None
+        if self._pw:
+            self._pw.stop()
+            self._pw = None
+        self._page = None
