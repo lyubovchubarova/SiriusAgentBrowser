@@ -53,7 +53,9 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-
+*.png
+*.jpg
+*.env
 
 
 

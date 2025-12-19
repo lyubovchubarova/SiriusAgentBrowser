@@ -6,24 +6,30 @@ from typing import Optional
 import json
 from PIL import Image, ImageDraw, ImageFont
 
-from playwright.sync_api import sync_playwright, Playwright, Browser, BrowserContext, Page
+from playwright.sync_api import (
+    Browser,
+    BrowserContext,
+    Page,
+    Playwright,
+    sync_playwright,
+)
 
 
 @dataclass
 class BrowserOptions:
-    headless: bool = True              # False = окно видно
-    browser_name: str = "chromium"     # chromium | firefox | webkit
-    slow_mo_ms: int = 0                # для дебага, например 200
-    viewport: Optional[dict] = None    # например {"width": 1280, "height": 720}
+    headless: bool = True  # False = окно видно
+    browser_name: str = "chromium"  # chromium | firefox | webkit
+    slow_mo_ms: int = 0  # для дебага, например 200
+    viewport: dict | None = None  # например {"width": 1280, "height": 720}
 
 
 class BrowserController:
     def __init__(self, options: BrowserOptions | None = None):
         self.options = options or BrowserOptions()
-        self._pw: Optional[Playwright] = None
-        self._browser: Optional[Browser] = None
-        self._context: Optional[BrowserContext] = None
-        self._page: Optional[Page] = None
+        self._pw: Playwright | None = None
+        self._browser: Browser | None = None
+        self._context: BrowserContext | None = None
+        self._page: Page | None = None
 
     @property
     def page(self) -> Page:
@@ -31,7 +37,7 @@ class BrowserController:
             raise RuntimeError("Browser is not started. Call start() first.")
         return self._page
 
-    def start(self) -> "BrowserController":
+    def start(self) -> BrowserController:
         if self._browser:
             return self
 
@@ -50,7 +56,9 @@ class BrowserController:
         self._page = self._context.new_page()
         return self
 
-    def open(self, url: str, wait_until: str = "domcontentloaded") -> "BrowserController":
+    def open(
+        self, url: str, wait_until: str = "domcontentloaded"
+    ) -> BrowserController:
         self.page.goto(url, wait_until=wait_until)
         return self
 
