@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Literal
 
 from PIL import Image, ImageDraw, ImageFont
 from playwright.sync_api import (
@@ -10,6 +11,7 @@ from playwright.sync_api import (
     BrowserContext,
     Page,
     Playwright,
+    ViewportSize,
     sync_playwright,
 )
 
@@ -19,7 +21,7 @@ class BrowserOptions:
     headless: bool = True  # False = окно видно
     browser_name: str = "chromium"  # chromium | firefox | webkit
     slow_mo_ms: int = 0  # для дебага, например 200
-    viewport: dict | None = None  # {"width": 1280, "height": 720}
+    viewport: ViewportSize | None = None  # {"width": 1280, "height": 720}
 
 
 class BrowserController:
@@ -55,7 +57,13 @@ class BrowserController:
         self._page = self._context.new_page()
         return self
 
-    def open(self, url: str, wait_until: str = "domcontentloaded") -> BrowserController:
+    def open(
+        self,
+        url: str,
+        wait_until: Literal[
+            "commit", "domcontentloaded", "load", "networkidle"
+        ] = "domcontentloaded",
+    ) -> BrowserController:
         self.page.goto(url, wait_until=wait_until)
         return self
 
@@ -71,7 +79,7 @@ class BrowserController:
         meta_path: str | None = None,
         max_elements: int = 400,
         padding: int = 2,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """
         Скриншот ТОЛЬКО видимой части (viewport) + bbox кликабельных элементов + id.
         Сохраняет картинку и json с метаданными.
@@ -186,7 +194,7 @@ class BrowserController:
         draw = ImageDraw.Draw(im)
 
         try:
-            font = ImageFont.truetype("DejaVuSans.ttf", 14)
+            font: Any = ImageFont.truetype("DejaVuSans.ttf", 14)
         except Exception:
             font = ImageFont.load_default()
 
@@ -229,8 +237,8 @@ class BrowserController:
 
             lx1 = x1
             ly1 = max(0, y1 - th - pad * 2)
-            lx2 = clamp_px(x1 + tw + pad * 2, 0, W - 1)
-            ly2 = clamp_px(ly1 + th + pad * 2, 0, H - 1)
+            lx2 = clamp_px(int(x1 + tw + pad * 2), 0, W - 1)
+            ly2 = clamp_px(int(ly1 + th + pad * 2), 0, H - 1)
 
             draw.rectangle([lx1, ly1, lx2, ly2], fill=(255, 0, 0, 200))
             draw.text(
