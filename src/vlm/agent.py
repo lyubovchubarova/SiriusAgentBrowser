@@ -5,7 +5,7 @@ import openai
 
 
 class VLMAgent:
-    def __init__(self, token: str, folder_id: str) -> None:
+    def __init__(self, token: str, folder_id: str, system_prompt: str) -> None:
         if token is None or folder_id is None:
             raise ValueError("Невалидные данные в .env")
         self.model = f"gpt://{folder_id}/gemma-3-27b-it/latest"
@@ -14,7 +14,7 @@ class VLMAgent:
             base_url="https://llm.api.cloud.yandex.net/v1",
             project=folder_id,
         )
-        with pathlib.Path("system_prompt.txt").open(encoding="utf8") as file:
+        with pathlib.Path(system_prompt).open(encoding="utf8") as file:
             self.system_prompt = file.read()
 
     def request(self, filename: str, prompt: str) -> str | None:
@@ -45,3 +45,4 @@ class VLMAgent:
         )
 
         return response.choices[0].message.content
+

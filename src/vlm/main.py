@@ -29,6 +29,7 @@ if __name__ == "__main__":
     vision_agent: VLMAgent = VLMAgent(
         token=os.getenv("YANDEX_GPT_API_TOKEN", ""),
         folder_id=os.getenv("YANDEX_CLOUD_FOLDER_ID", ""),
+        system_prompt="system_prompt.txt"
     )
     image_url = "C:\\Users\\maxim\\PycharmProjects\\SiriusAgentBrowser\\screenshots\\wiki.png"
     prompt = "кликни скачать на андроид"
