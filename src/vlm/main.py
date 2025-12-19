@@ -21,8 +21,8 @@ class ClickModel(pydantic.BaseModel):
 if __name__ == "__main__":
     dotenv.load_dotenv()
     if (
-            os.getenv("YANDEX_GPT_API_TOKEN", None) is None
-            or os.getenv("YANDEX_CLOUD_FOLDER_ID", None) is None
+        os.getenv("YANDEX_GPT_API_TOKEN", None) is None
+        or os.getenv("YANDEX_CLOUD_FOLDER_ID", None) is None
     ):
         raise ValueError("Невалидные данные в .env")
 
@@ -30,7 +30,9 @@ if __name__ == "__main__":
         token=os.getenv("YANDEX_GPT_API_TOKEN", ""),
         folder_id=os.getenv("YANDEX_CLOUD_FOLDER_ID", ""),
     )
-    image_url = "C:\\Users\\maxim\\PycharmProjects\\SiriusAgentBrowser\\screenshots\\wiki.png"
+    image_url = (
+        "C:\\Users\\maxim\\PycharmProjects\\SiriusAgentBrowser\\screenshots\\wiki.png"
+    )
     prompt = "кликни скачать на андроид"
     response = vision_agent.request(image_url, prompt)
     print(response)

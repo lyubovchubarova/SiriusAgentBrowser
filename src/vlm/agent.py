@@ -21,7 +21,7 @@ class VLMAgent:
         with pathlib.Path(filename).open("rb") as f:
             image_base64 = base64.b64encode(f.read()).decode("utf-8")
         image_payload = (
-            f"data:image/{filename[filename.rfind('.') + 1:]};base64,{image_base64}"
+            f"data:image/{filename[filename.rfind('.') + 1 :]};base64,{image_base64}"
         )
         response = self.client.chat.completions.create(
             model=self.model,
@@ -30,7 +30,7 @@ class VLMAgent:
                     "role": "system",
                     "content": [
                         {"type": "text", "text": self.system_prompt},
-                    ]
+                    ],
                 },
                 {
                     "role": "user",
@@ -38,7 +38,7 @@ class VLMAgent:
                         {"type": "text", "text": prompt},
                         {"type": "image_url", "image_url": {"url": image_payload}},
                     ],
-                }
+                },
             ],
             temperature=0.3,
             max_tokens=10000,

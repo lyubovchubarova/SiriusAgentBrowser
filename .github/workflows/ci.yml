@@ -3,14 +3,8 @@ name: CI
 on:
   push:
     branches: [main, master]
-    paths:
-      - 'src/browser/**'
-      - '.github/workflows/**'
   pull_request:
     branches: [main, master]
-    paths:
-      - 'src/browser/**'
-      - '.github/workflows/**'
 
 jobs:
   lint:
@@ -32,12 +26,12 @@ jobs:
           pip install ruff mypy
 
       - name: Run Ruff linter
-        run: ruff check src/browser
+        run: ruff check .
 
       - name: Run Ruff formatter check
-        run: ruff format --check src/browser
+        run: ruff format --check .
 
       - name: Run mypy type checker
-        run: mypy src/browser
+        run: mypy src/
 
 
