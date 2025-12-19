@@ -3,11 +3,9 @@ import os
 import re
 from dataclasses import dataclass
 
-from pydantic import ValidationError
-from openai import OpenAI
-
 from models import Plan
-
+from openai import OpenAI
+from pydantic import ValidationError
 
 SYSTEM_PROMPT = """
 You are a planner for browser automation.
