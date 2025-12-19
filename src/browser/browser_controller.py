@@ -16,10 +16,10 @@ from playwright.sync_api import (
 
 @dataclass
 class BrowserOptions:
-    headless: bool = True              # False = окно видно
-    browser_name: str = "chromium"     # chromium | firefox | webkit
-    slow_mo_ms: int = 0                # для дебага, например 200
-    viewport: dict | None = None    # {"width": 1280, "height": 720}
+    headless: bool = True  # False = окно видно
+    browser_name: str = "chromium"  # chromium | firefox | webkit
+    slow_mo_ms: int = 0  # для дебага, например 200
+    viewport: dict | None = None  # {"width": 1280, "height": 720}
 
 
 class BrowserController:
@@ -233,15 +233,19 @@ class BrowserController:
             ly2 = clamp_px(ly1 + th + pad * 2, 0, H - 1)
 
             draw.rectangle([lx1, ly1, lx2, ly2], fill=(255, 0, 0, 200))
-            draw.text((lx1 + pad, ly1 + pad), label, font=font, fill=(255, 255, 255, 255))
+            draw.text(
+                (lx1 + pad, ly1 + pad), label, font=font, fill=(255, 255, 255, 255)
+            )
 
-            meta["elements"].append({
-                "id": el["id"],
-                "type": el["type"],
-                "text": el["text"],
-                "bbox_css": el["bbox"],
-                "bbox_px": {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
-            })
+            meta["elements"].append(
+                {
+                    "id": el["id"],
+                    "type": el["type"],
+                    "text": el["text"],
+                    "bbox_css": el["bbox"],
+                    "bbox_px": {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
+                }
+            )
 
         im.convert("RGB").save(str(img_path))
 
