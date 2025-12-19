@@ -1,0 +1,10 @@
+{
+  "devicePixelRatio": 1.0000000298023224,
+  "viewport_only": true,
+  "image": "screenshots\\current_state.png",
+  "viewport": {
+    "w": 1280,
+    "h": 720
+  },
+  "elements": []
+}

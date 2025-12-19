@@ -1,6 +1,7 @@
 import logging
 import os
 import sys
+
 from dotenv import load_dotenv
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -25,10 +26,19 @@ def main():
 
     # Инициализируем оркестратор
     # headless=False чтобы видеть браузер
-    orchestrator = Orchestrator(headless=False)
+    # Можно выбрать провайдера: "yandex" или "openai"
+    # Можно выбрать модель для openai: "gpt-4o", "gpt-3.5-turbo" и т.д.
+    provider = os.getenv("LLM_PROVIDER", "yandex")
+    model = os.getenv("LLM_MODEL", "gpt-4o")
+
+    print(f"Using LLM Provider: {provider}, Model: {model}")
+
+    orchestrator = Orchestrator(
+        headless=False, debug_mode=False, llm_provider=provider, llm_model=model
+    )
 
     # Пример запроса
-    user_query = "Зайди на википедию и найди статью про Python"
+    user_query = "Найди мем с котами и выведи ссылку на него"
 
     print(f"User Query: {user_query}")
     print("-" * 50)
