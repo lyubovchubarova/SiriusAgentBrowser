@@ -58,7 +58,11 @@ class BrowserController:
         return self
 
     def open(
-        self, url: str, wait_until: Literal["commit", "domcontentloaded", "load", "networkidle"] = "domcontentloaded"
+        self,
+        url: str,
+        wait_until: Literal[
+            "commit", "domcontentloaded", "load", "networkidle"
+        ] = "domcontentloaded",
     ) -> BrowserController:
         self.page.goto(url, wait_until=wait_until)
         return self
