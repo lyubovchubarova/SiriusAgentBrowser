@@ -11,6 +11,7 @@ from playwright.sync_api import (
     BrowserContext,
     Page,
     Playwright,
+    TimeoutError as PlaywrightTimeoutError,
     ViewportSize,
     sync_playwright,
 )
@@ -276,3 +277,151 @@ class BrowserController:
             self._pw.stop()
             self._pw = None
         self._page = None
+
+    def click_by_id(self, element_id: str, timeout_ms: int = 5000) -> None:
+        """
+        Клик по элементу, которому ранее присвоен data-pw-bbox-id = element_id
+        (эти id ты создаёшь в screenshot_with_bboxes()).
+        """
+        locator = self.page.locator(f'[data-pw-bbox-id="{element_id}"]').first
+        locator.wait_for(state="visible", timeout=timeout_ms)
+        locator.click(timeout=timeout_ms)
+
+    def type_by_id(
+        self,
+        element_id: str,
+        text: str,
+        timeout_ms: int = 5000,
+        clear: bool = True,
+        press_enter: bool = False,
+    ) -> None:
+        """
+        Ввод текста в input/textarea/contenteditable по id.
+        """
+        locator = self.page.locator(f'[data-pw-bbox-id="{element_id}"]').first
+        locator.wait_for(state="visible", timeout=timeout_ms)
+
+        # фокус
+        locator.click(timeout=timeout_ms)
+
+        if clear:
+            # универсальная очистка
+            try:
+                locator.fill("", timeout=timeout_ms)
+            except Exception:
+                # если fill не поддерживается (редко), чистим через Ctrl/Command+A + Backspace
+                mod = "Meta" if self.page.evaluate("() => navigator.platform.includes('Mac')") else "Control"
+                self.page.keyboard.press(f"{mod}+A")
+                self.page.keyboard.press("Backspace")
+
+        # ввод
+        try:
+            locator.fill(text, timeout=timeout_ms)
+        except Exception:
+            locator.type(text, delay=0)
+
+        if press_enter:
+            self.page.keyboard.press("Enter")
+
+    def scroll(self, delta_y: int) -> None:
+        """
+        Скролл страницы на delta_y пикселей.
+        delta_y > 0 — вниз, delta_y < 0 — вверх.
+        """
+        self.page.mouse.wheel(0, delta_y)
+
+    def refresh_bbox_ids(self, max_elements: int = 400) -> dict:
+        """
+        Важно: после скролла/перехода id могут исчезнуть.
+        Этот метод заново находит кликабельные элементы и проставляет им data-pw-bbox-id.
+        Возвращает метаданные (id/type/text/bbox) как раньше.
+        """
+        js = r"""
+        (maxElements) => {
+          const selectors = [
+            'a[href]',
+            'button',
+            'input',
+            'textarea',
+            'select',
+            '[role="button"]',
+            '[role="link"]',
+            '[onclick]',
+            '[tabindex]:not([tabindex="-1"])'
+          ];
+
+          const uniq = (arr) => Array.from(new Set(arr));
+          const nodes = uniq(selectors.flatMap(s => Array.from(document.querySelectorAll(s))));
+
+          const isVisible = (el) => {
+            const style = window.getComputedStyle(el);
+            if (!style) return false;
+            if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+
+            const r = el.getBoundingClientRect();
+            if (r.width < 2 || r.height < 2) return false;
+
+            if (r.bottom <= 0 || r.right <= 0) return false;
+            if (r.top >= window.innerHeight || r.left >= window.innerWidth) return false;
+
+            return true;
+          };
+
+          const getType = (el) => {
+            const tag = el.tagName.toLowerCase();
+            if (tag === 'a') return 'link';
+            if (tag === 'button') return 'button';
+            if (tag === 'input') return `input:${(el.getAttribute('type') || 'text').toLowerCase()}`;
+            if (tag === 'textarea') return 'textarea';
+            if (tag === 'select') return 'select';
+            const role = (el.getAttribute('role') || '').toLowerCase();
+            if (role) return `role:${role}`;
+            if (el.hasAttribute('onclick')) return 'onclick';
+            return tag;
+          };
+
+          const getText = (el) => {
+            const tag = el.tagName.toLowerCase();
+            if (tag === 'input' || tag === 'textarea') {
+              return (el.getAttribute('placeholder') || el.getAttribute('aria-label') || el.value || '')
+                .trim().slice(0, 80);
+            }
+            return (el.innerText || el.textContent || el.getAttribute('aria-label') || '')
+              .trim().replace(/\s+/g, ' ').slice(0, 80);
+          };
+
+          const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+          const out = [];
+          let idx = 1;
+
+          for (const el of nodes) {
+            if (!isVisible(el)) continue;
+
+            const r = el.getBoundingClientRect();
+            const x = clamp(r.x, 0, window.innerWidth);
+            const y = clamp(r.y, 0, window.innerHeight);
+            const x2 = clamp(r.x + r.width, 0, window.innerWidth);
+            const y2 = clamp(r.y + r.height, 0, window.innerHeight);
+
+            const w = x2 - x;
+            const h = y2 - y;
+            if (w < 2 || h < 2) continue;
+
+            const id = `E${idx++}`;
+            el.dataset.pwBboxId = id;
+
+            out.push({ id, type: getType(el), text: getText(el), bbox: { x, y, w, h } });
+
+            if (out.length >= maxElements) break;
+          }
+
+          return {
+            devicePixelRatio: window.devicePixelRatio || 1,
+            viewport: { w: window.innerWidth, h: window.innerHeight },
+            elements: out
+          };
+        }
+        """
+        return self.page.evaluate(js, max_elements)
+
