@@ -7,6 +7,7 @@ from src.browser.debug_wrapper import DebugWrapper
 from src.planner.planner import Planner
 from src.planner.models import Plan
 from src.vlm.vlm import VisionAgent
+from src.memory.long_term_memory import LongTermMemory
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,7 @@ class Orchestrator:
         self.planner = Planner(provider=llm_provider, model=llm_model)
         self.vision_agent = VisionAgent()
         self.browser_controller = BrowserController(BrowserOptions(headless=headless))
+        self.memory = LongTermMemory()
         self._is_browser_started = False
         self.debug_mode = debug_mode
 
@@ -51,6 +53,14 @@ class Orchestrator:
         try:
             # 1. Планирование
             logger.info("Creating plan...")
+            
+            # Retrieve memory context
+            memory_context = ""
+            # We don't have a URL yet, so we can't fetch domain-specific memory easily
+            # But we can try if the user request contains a URL
+            # For now, let's skip initial memory or try to guess domain from request?
+            # Better: Pass empty memory first, and update plan with memory later when we have a URL.
+            
             plan: Plan = self.planner.create_plan(user_request)
             logger.info(f"Plan created: {plan.task} ({len(plan.steps)} steps)")
 
@@ -140,10 +150,17 @@ class Orchestrator:
                     dom_str += f"\n\nAccessibility Tree (Semantic View):\n{ax_tree}"
 
                     current_url = page.url
+                    
+                    # Retrieve Memory Context
+                    memory_context = self.memory.retrieve_relevant(current_url, user_request)
+                    if memory_context:
+                        logger.info("Memory context retrieved.")
+                        
                 except Exception as e:
                     logger.error(f"Failed to capture state: {e}")
                     dom_str = "Error capturing DOM"
                     current_url = "unknown"
+                    memory_context = ""
 
                 # Prepare history string for planner
                 # Take last 20 steps to provide better context and avoid loops
@@ -202,13 +219,21 @@ class Orchestrator:
                 # Replan
                 logger.info("Replanning based on new state...")
                 try:
+                    # Inject memory into history or a new field?
+                    # Planner.update_plan takes specific args. Let's append memory to history for now or modify Planner.
+                    # Let's append to history_str as it's the easiest way to pass context without changing signature too much
+                    
+                    full_context_str = history_str
+                    if memory_context:
+                        full_context_str += f"\n\n{memory_context}"
+                    
                     new_plan = self.planner.update_plan(
                         task=user_request,
                         last_step_desc=step.description,
                         last_step_result=result,
                         current_url=current_url,
                         dom_elements=dom_str,
-                        history=history_str,
+                        history=full_context_str,
                     )
 
                     # Check if task is completed
@@ -236,6 +261,14 @@ class Orchestrator:
                     # If replan fails, we are stuck.
                     break
 
+            # Save successful experience to memory
+            if execution_history and "Failed" not in execution_history[-1]["result"]:
+                 # Only save if the last step wasn't a failure (heuristic)
+                 # Ideally we need a "Task Completed" signal
+                 last_url = execution_history[-1]["url"]
+                 self.memory.add_experience(last_url, user_request, execution_history)
+                 logger.info("Experience saved to long-term memory.")
+
             return "\n".join(results)
 
         except Exception as e:
@@ -244,6 +277,4 @@ class Orchestrator:
         finally:
             # self.close_browser()
             pass
-            # Обычно агент выполнил задачу и завершил работу.
-            # self.close_browser()
-            pass
+

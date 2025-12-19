@@ -78,6 +78,40 @@ class VisionAgent:
         except:
             pass
 
+    def _handle_popups(self, page: Page):
+        """
+        Attempts to close common cookie banners and popups.
+        """
+        try:
+            # Common selectors for "Accept", "Agree", "Allow", "Close" buttons
+            selectors = [
+                "button[id*='cookie']",
+                "button[class*='cookie']",
+                "div[class*='cookie'] button",
+                "button[aria-label*='cookie']",
+                "button:has-text('Accept')",
+                "button:has-text('Agree')",
+                "button:has-text('Allow')",
+                "button:has-text('Принять')",
+                "button:has-text('Согласиться')",
+                "[aria-label='Close']",
+                ".close-button",
+            ]
+
+            # Only click if it looks like a cookie banner (bottom/top bar or modal)
+            # This is risky, so we only try if we are sure
+            # For now, let's just try to find "Accept all" type buttons
+
+            accept_btns = page.locator(
+                "button:has-text('Accept all'), button:has-text('Allow all'), button:has-text('Принять все')"
+            )
+            if accept_btns.count() > 0:
+                print("Found cookie banner, clicking Accept...")
+                accept_btns.first.click(timeout=2000)
+                time.sleep(1)
+        except:
+            pass
+
     def verify_step(
         self, step: Step, page: Page, execution_result: str
     ) -> tuple[bool, str]:
@@ -139,15 +173,57 @@ class VisionAgent:
     def execute_step(self, step: Step, page: Page) -> str:
         """
         Выполняет один шаг плана.
-
-        Args:
-            step: Шаг плана для выполнения.
-            page: Страница браузера Playwright.
-
-        Returns:
-            Результат выполнения шага.
         """
         print(f"Executing step {step.step_id}: {step.action} - {step.description}")
+
+        # 0. Check for ID-based execution (Highest Priority)
+        # Looks for [E123] pattern
+        id_match = re.search(r"\[(E\d+)\]", step.description)
+        if id_match:
+            element_id = id_match.group(1)
+            print(f"Found ID {element_id} in description. Attempting precise interaction...")
+            try:
+                # Selector for the element with the specific data attribute
+                selector = f"[data-pw-bbox-id='{element_id}']"
+                element = page.locator(selector).first
+                
+                if element.is_visible():
+                    # Highlight for feedback
+                    try:
+                        element.evaluate("el => el.style.border = '4px solid #00FF00'") # Green for ID match
+                        time.sleep(0.5)
+                    except:
+                        pass
+
+                    if step.action == "click":
+                        element.click(timeout=5000)
+                        try:
+                            page.wait_for_load_state("domcontentloaded", timeout=5000)
+                        except:
+                            time.sleep(1)
+                        return f"Clicked element {element_id} (ID-based)"
+                    
+                    elif step.action == "type":
+                        text_to_type = "Python"
+                        match = re.search(r"['\"](.*?)['\"]", step.description)
+                        if match:
+                            text_to_type = match.group(1)
+                        
+                        element.click()
+                        element.fill("")
+                        element.type(text_to_type, delay=50)
+                        page.keyboard.press("Enter")
+                        time.sleep(2)
+                        return f"Typed '{text_to_type}' into element {element_id} (ID-based)"
+                        
+                    elif step.action == "hover":
+                        element.hover()
+                        time.sleep(1)
+                        return f"Hovered over element {element_id} (ID-based)"
+                else:
+                    print(f"Element {element_id} found but not visible. Falling back to heuristics.")
+            except Exception as e:
+                print(f"ID-based interaction failed: {e}. Falling back to heuristics.")
 
         try:
             if step.action == "navigate":
@@ -165,6 +241,7 @@ class VisionAgent:
 
                     try:
                         page.goto(url, timeout=30000)
+                        self._handle_popups(page)
                         return f"Navigated to {url}"
                     except Exception as e:
                         return f"Failed to navigate to {url}: {e}"
@@ -223,10 +300,13 @@ class VisionAgent:
                 # Try to find search input
                 search_input = None
                 selectors = [
+                    "input[name='q']", # Google/common
                     "input[name='search']",
                     "input[type='search']",
                     "input[placeholder*='search']",
                     "input[placeholder*='поиск']",
+                    "input[aria-label*='search']",
+                    "input[aria-label*='поиск']",
                     "input",
                 ]
 
@@ -254,6 +334,27 @@ class VisionAgent:
                             search_input, found_sel = find_input()
                     except:
                         pass
+
+                if not search_input and self.vlm.client:
+                    print("Trying VLM visual search for input field...")
+                    try:
+                        self._mark_page(page)
+                        screenshot_path = "screenshots/type_target.png"
+                        page.screenshot(path=screenshot_path)
+                        self._unmark_page(page)
+
+                        vlm_resp = self.vlm.get_target_id(
+                            screenshot_path, "Click on the search input field or text box"
+                        )
+                        match = re.search(r":id:(\d+):", vlm_resp)
+                        if match:
+                            el_id = int(match.group(1))
+                            handle = page.evaluate_handle(f"window.som_elements[{el_id}]")
+                            if handle:
+                                search_input = handle.as_element()
+                                found_sel = f"VLM ID {el_id}"
+                    except Exception as e:
+                        print(f"VLM type fallback failed: {e}")
 
                 if search_input:
                     try:
@@ -408,10 +509,45 @@ class VisionAgent:
                                 if img_el.is_visible():
                                     element = img_el
 
+                        # 4. Try button/input by value or placeholder (often missed by get_by_text)
+                        if not element:
+                            try:
+                                btn = page.locator(f"input[value='{target_text}'], input[placeholder='{target_text}']").first
+                                if btn.is_visible():
+                                    element = btn
+                            except:
+                                pass
+
+                        # 5. Fuzzy XPath search (Case-insensitive contains)
+                        if not element:
+                            try:
+                                lower_text = target_text.lower()
+                                # Translate uppercase to lowercase for case-insensitive search
+                                xpath = f"//*[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{lower_text}')]"
+                                fuzzy_el = page.locator(xpath).first
+                                if fuzzy_el.is_visible():
+                                    element = fuzzy_el
+                            except:
+                                pass
+
                         if element:
                             try:
+                                # Highlight element before clicking
+                                try:
+                                    element.evaluate(
+                                        "el => el.style.border = '3px solid red'"
+                                    )
+                                    time.sleep(0.5)
+                                except:
+                                    pass
+
                                 element.click(timeout=5000)
-                                time.sleep(2)
+                                try:
+                                    page.wait_for_load_state(
+                                        "domcontentloaded", timeout=5000
+                                    )
+                                except:
+                                    time.sleep(2)
                                 return f"Clicked '{target_text}'"
                             except Exception as e:
                                 err_msg = str(e)
@@ -560,6 +696,14 @@ class VisionAgent:
                 return "Scrolled down"
 
             elif step.action == "extract":
+                # 0. Heuristic: URL extraction
+                if (
+                    "url" in step.description.lower()
+                    or "link" in step.description.lower()
+                    or "address" in step.description.lower()
+                ):
+                    return f"Extracted URL: {page.url}"
+
                 # 1. Try VLM extraction first (Smart Extraction)
                 if self.vlm.client:
                     try:

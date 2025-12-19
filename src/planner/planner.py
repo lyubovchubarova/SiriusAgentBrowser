@@ -19,9 +19,20 @@ Hard constraints:
 - steps length MUST be <= 10. If task is complex, merge steps.
 - step_id must start from 1 and increase by 1 without gaps.
 - action must be exactly one of: navigate, click, type, scroll, extract, hover.
-- description: short, clear, imperative, one action. For 'navigate', MUST include the full URL (e.g., https://wikipedia.org).
+- description: short, clear, imperative.
+  - For 'navigate', MUST include the full URL.
+  - For 'click' or 'type', YOU MUST USE THE ELEMENT ID if available in the context (e.g., "Click [E12] 'Search'", "Type 'cat' into [E45]").
+  - If no ID is visible, use the text description in single quotes.
 - expected_result: concrete visible outcome.
 - estimated_time: integer seconds.
+
+TREE OF THOUGHTS (ToT) REASONING:
+Before generating the final plan, you MUST perform a mental simulation of 3 possible strategies in the "reasoning" field.
+Structure your reasoning like this:
+1. Strategy A: [Description] -> Pros/Cons -> Score (1-10)
+2. Strategy B: [Description] -> Pros/Cons -> Score (1-10)
+3. Strategy C: [Description] -> Pros/Cons -> Score (1-10)
+Selected Strategy: [Best Strategy] because [Reason].
 
 Strategies for complex pages:
 - If the target is inside a carousel or horizontal list, add a step to click the "Next", "Right Arrow", or ">" button.
@@ -36,7 +47,7 @@ CRITICAL NAVIGATION RULES:
 
 Schema:
 {
-  "reasoning": string, // Explain your thought process here. Why did you choose these steps? What is the strategy?
+  "reasoning": string, // MANDATORY: Tree of Thoughts analysis (3 strategies + selection).
   "task": string,
   "steps": [
     {
