@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-Action = Literal["navigate", "click", "type", "scroll"]
+Action = Literal["navigate", "click", "type", "scroll", "extract"]
 
 
 class Step(BaseModel):

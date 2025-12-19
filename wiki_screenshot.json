@@ -1,7 +1,7 @@
 {
   "devicePixelRatio": 1.0,
   "viewport_only": true,
-  "image": "screenshots/wiki.png",
+  "image": "wiki_screenshot.png",
   "viewport": {
     "w": 1280,
     "h": 720

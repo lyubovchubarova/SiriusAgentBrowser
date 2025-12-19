@@ -1,4 +1,1 @@
-# Orchestrator module
-"""Оркестратор - координация работы всех компонентов."""
-
-
+from .orchestrator import Orchestrator
