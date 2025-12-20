@@ -18,13 +18,14 @@ Return ONLY valid JSON. No code fences. No commentary.
 Hard constraints:
 - steps length MUST be <= 10. If task is complex, merge steps.
 - step_id must start from 1 and increase by 1 without gaps.
-- action must be exactly one of: navigate, click, type, scroll, extract, hover, inspect, wait.
+- action must be exactly one of: navigate, click, type, scroll, extract, hover, inspect, wait, finish.
 - description: short, clear, imperative.
   - For 'navigate', MUST include the full URL.
   - For 'click' or 'type', YOU MUST USE THE ELEMENT ID if available in the context (e.g., "Click [E12] 'Search'", "Type 'cat' into [E45]").
   - If no ID is visible, use the text description in single quotes.
   - For 'inspect', describe what element or section you want to analyze (e.g., "Inspect the main article content").
   - For 'wait', describe what you are waiting for (e.g., "Wait for the results to load").
+  - For 'finish', describe why the task is complete. If the task was just to find/open a page, use this action as soon as the page is loaded.
 - expected_result: concrete visible outcome.
 - estimated_time: integer seconds.
 
@@ -43,9 +44,18 @@ Strategies for complex pages:
 - If a menu is hidden, try to "hover" over the parent element to reveal it.
 
 CRITICAL NAVIGATION RULES:
-- If you don't know the exact URL, do NOT guess. Navigate to a search engine (https://google.com) and search.
-- If you are on a search results page (Google, Yandex, etc.), DO NOT use 'navigate' to go to the target site. Use 'click' to select the relevant result.
+- NEVER guess specific URLs (like 'https://www.wildberries.ru/catalog/electronics').
+- ALWAYS start by navigating to a search engine (https://ya.ru) and searching for the query, unless the user provided a specific URL.
+- PREFER Yandex (ya.ru) for all search queries.
+- If you are on a search results page, DO NOT use 'navigate' to go to the target site. Use 'click' to select the relevant result.
 - If the previous step resulted in a "fallback search", your next step MUST be to 'click' on a result.
+
+QUALITY CONTROL & COMPLETION:
+- When selecting a search result, CHECK THE HREF/URL in the context if available. Ensure it matches the target domain (e.g., 'genius.com' for lyrics, not 'yandex.ru/ads').
+- Avoid clicking 'Sponsored', 'Ad', or 'Реклама' links unless explicitly asked.
+- In your reasoning, explicitly state WHY you chose a specific ID (e.g., "I chose [E15] because it links to genius.com and has the correct title").
+- CHECK IF THE TASK IS ALREADY COMPLETED. If the current page content matches the user's request (e.g., the article is open), use the 'finish' action immediately. DO NOT continue clicking or opening more pages.
+- SINGLE TAB POLICY: PREFER working in the current tab. Only open a new tab if the user EXPLICITLY requested it (e.g., "open in a new tab"). If the user did not ask for a new tab, assume all links should open in the current tab.
 
 VISION / SCREENSHOTS:
 - You primarily work with the DOM tree.
@@ -59,7 +69,7 @@ Schema:
   "steps": [
     {
       "step_id": number,
-      "action": "navigate" | "click" | "type" | "scroll" | "extract" | "hover" | "inspect" | "wait",
+      "action": "navigate" | "click" | "type" | "scroll" | "extract" | "hover" | "inspect" | "wait" | "finish",
       "description": string,
       "expected_result": string
     }
@@ -306,7 +316,7 @@ class Planner:
         except Exception as e:
             return True, f"Critique failed, assuming valid. Error: {e}"
 
-    def generate_summary(self, task: str, history: str) -> str:
+    def generate_summary(self, task: str, history: str, page_content: str = "") -> str:
         """
         Generates a human-readable summary of the task execution.
         """
@@ -316,10 +326,20 @@ class Planner:
         Here is the execution history of the agent:
         {history}
 
+        Here is the text content of the final page (truncated):
+        {page_content[:5000]}
+
         Please provide a concise, human-readable answer or summary of the result.
-        If the task was to find information, provide that information clearly.
-        If the task was an action, confirm it was completed and describe the outcome.
-        Do not mention internal steps like "clicked element E12" unless necessary for context.
+
+        IMPORTANT RULES FOR SUMMARY:
+        1. If the user asked to "find", "open", "read", or "navigate to" a page/article, and the agent successfully opened it:
+           - Just confirm that the page is open.
+           - Briefly mention the title or topic of the page to confirm it's the right one.
+           - DO NOT copy the full text of the article into the chat unless explicitly asked (e.g. "summarize", "copy text").
+        2. If the user asked a specific question (e.g., "what is the price?", "who is the CEO?"):
+           - Extract the specific answer from the page content.
+        3. Keep it short and natural.
+        4. Do not mention internal steps like "clicked element E12" unless necessary for context.
         """
 
         try:

@@ -20,13 +20,22 @@ class Orchestrator:
         debug_mode: bool = False,
         llm_provider: str = "yandex",
         llm_model: str = "gpt-4o",
+        cdp_url: str | None = None,
     ):
         self.planner = Planner(provider=llm_provider, model=llm_model)
         self.vision_agent = VisionAgent()
-        self.browser_controller = BrowserController(BrowserOptions(headless=headless))
+        self.browser_controller = BrowserController(
+            BrowserOptions(headless=headless, cdp_url=cdp_url)
+        )
         self.memory = LongTermMemory()
         self._is_browser_started = False
         self.debug_mode = debug_mode
+        self._stop_requested = False
+
+    def stop(self) -> None:
+        """Signals the orchestrator to stop execution."""
+        self._stop_requested = True
+        logger.info("Stop requested.")
 
     def start_browser(self) -> None:
         if not self._is_browser_started:
@@ -50,10 +59,12 @@ class Orchestrator:
         4. Возвращает результат.
         """
         logger.info(f"Processing request: {user_request}")
+        self._stop_requested = False
 
         try:
             # 1. Планирование
             logger.info("Creating plan...")
+            print(f"\n[PLANNER LOG] Requesting plan for: {user_request}")
 
             # Retrieve memory context
             memory_context = ""
@@ -63,6 +74,7 @@ class Orchestrator:
             # Better: Pass empty memory first, and update plan with memory later when we have a URL.
 
             plan: Plan = self.planner.create_plan(user_request)
+            print(f"[PLANNER LOG] Plan received: {plan}")
             logger.info(f"Plan created: {plan.task} ({len(plan.steps)} steps)")
 
             # 2. Запуск браузера
@@ -81,15 +93,46 @@ class Orchestrator:
 
             # Memory of executed steps for cycle detection
             execution_history = []
+            final_page_content = ""
 
             while plan.steps and step_count < max_steps:
+                if self._stop_requested:
+                    logger.info("Execution stopped by user request.")
+                    results.append("Execution stopped by user.")
+                    break
+
                 step = plan.steps[0]  # Always take the first step of the current plan
+
+                # Handle 'finish' action
+                if step.action == "finish":
+                    logger.info(f"Task completed: {step.description}")
+                    results.append(f"Task completed: {step.description}")
+
+                    # Extract content for summary
+                    try:
+                        final_page_content = page.evaluate("document.body.innerText")
+                    except Exception:
+                        final_page_content = "Could not extract content."
+
+                    # Add to history so memory saver knows we finished
+                    execution_history.append(
+                        {
+                            "description": step.description,
+                            "action": "finish",
+                            "result": "Task Completed Successfully",
+                            "url": page.url,
+                        }
+                    )
+                    break
+
                 step_count += 1
 
                 logger.info(f"Step {step.step_id}: {step.description}")
 
                 # Execute
-                result = self.vision_agent.execute_step(step, page)
+                result = self.vision_agent.execute_step(
+                    step, page, check_stop_callback=lambda: self._stop_requested
+                )
                 results.append(f"Step {step.step_id}: {result}")
                 logger.info(f"Step {step.step_id} result: {result}")
 
@@ -137,8 +180,15 @@ class Orchestrator:
                     # Limit to top 100 elements to save context
                     formatted_elements = []
                     for el in elements[:100]:
+                        extra_info = ""
+                        attrs = el.get("attributes", {})
+                        if attrs.get("href"):
+                            extra_info = f" (href: {attrs['href']})"
+                        elif attrs.get("placeholder"):
+                            extra_info = f" (placeholder: {attrs['placeholder']})"
+
                         formatted_elements.append(
-                            f'[{el["id"]}] {el["type"]} "{el["text"]}"'
+                            f'[{el["id"]}] {el["type"]} "{el["text"]}"{extra_info}'
                         )
                     dom_str = "\n".join(formatted_elements)
 
@@ -166,12 +216,14 @@ class Orchestrator:
                     memory_context = ""
 
                 # Prepare history string for planner
-                # Take last 20 steps to provide better context and avoid loops
+                # Pass FULL history to provide maximum context for the planner
                 history_str = ""
-                recent_history = execution_history[-20:]
-                start_idx = max(1, len(execution_history) - 19)
-                for i, h in enumerate(recent_history):
-                    history_str += f"- Step {start_idx + i}: {h['description']} (Action: {h['action']}) -> Result: {h['result']}\n"
+                for i, h in enumerate(execution_history):
+                    history_str += f"- Step {i + 1}: {h['description']} (Action: {h['action']}) -> Result: {h['result']}\n"
+
+                print(
+                    f"\n[PLANNER LOG] Updating plan based on history ({len(execution_history)} steps):\n{history_str}"
+                )
 
                 # Simple cycle detection
                 # If the exact same action description and result happened in the last 3 steps (excluding current), warn
@@ -217,6 +269,9 @@ class Orchestrator:
                 if cycle_warning:
                     history_str += f"\n{cycle_warning}"
                     logger.warning(f"Cycle detected: {cycle_warning}")
+                    print(
+                        f"[PLANNER LOG] Cycle warning added to context: {cycle_warning}"
+                    )
 
                 # Special handling for "No target found"
                 if "No target found" in result:
@@ -231,6 +286,9 @@ class Orchestrator:
 
                 # Replan
                 logger.info("Replanning based on new state...")
+                print(
+                    f"[PLANNER LOG] Replanning... Context: URL={current_url}, Last Result={result[:100]}..."
+                )
                 try:
                     # Inject memory into history or a new field?
                     # Planner.update_plan takes specific args. Let's append memory to history for now or modify Planner.
@@ -249,12 +307,21 @@ class Orchestrator:
                         dom_elements=dom_str,
                         history=full_context_str,
                     )
+                    print(f"[PLANNER LOG] Updated Plan: {new_plan}")
 
                     # 2. Check if Planner requested vision
                     if new_plan.needs_vision:
                         logger.info(
-                            "Planner requested vision (screenshot). Retrying with screenshot..."
+                            "Planner requested vision (screenshot). Waiting for full load and retrying..."
                         )
+                        # Force wait for full load before taking screenshot for VLM
+                        try:
+                            page.wait_for_load_state("load", timeout=15000)
+                        except Exception:
+                            logger.warning(
+                                "Timeout waiting for full load (vision fallback)."
+                            )
+
                         screenshot_path = "screenshots/planning_context.png"
                         self.browser_controller.screenshot(
                             screenshot_path, viewport_only=True
@@ -327,13 +394,17 @@ class Orchestrator:
                     break
 
             # Generate human-readable summary
+            final_output = ""
             try:
                 history_text = "\n".join(results)
-                summary = self.planner.generate_summary(user_request, history_text)
-                results.append(f"\n--- FINAL RESULT ---\n{summary}")
+                summary = self.planner.generate_summary(
+                    user_request, history_text, final_page_content
+                )
+                final_output = summary
                 logger.info(f"Final Summary: {summary}")
             except Exception as e:
                 logger.error(f"Failed to generate summary: {e}")
+                final_output = "Задача выполнена, но не удалось сгенерировать отчет."
 
             # Save successful experience to memory
             if execution_history and "Failed" not in execution_history[-1]["result"]:
@@ -343,7 +414,7 @@ class Orchestrator:
                 self.memory.add_experience(last_url, user_request, execution_history)
                 logger.info("Experience saved to long-term memory.")
 
-            return "\n".join(results)
+            return final_output
 
         except Exception as e:
             logger.error(f"Error processing request: {e}", exc_info=True)

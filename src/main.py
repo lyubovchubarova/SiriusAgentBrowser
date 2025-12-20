@@ -31,11 +31,18 @@ def main() -> None:
     # Можно выбрать модель для openai: "gpt-4o", "gpt-3.5-turbo" и т.д.
     provider = os.getenv("LLM_PROVIDER", "yandex")
     model = os.getenv("LLM_MODEL", "gpt-4o")
+    cdp_url = os.getenv("CDP_URL")  # Например: "http://localhost:9222"
 
     print(f"Using LLM Provider: {provider}, Model: {model}")
+    if cdp_url:
+        print(f"Connecting to existing browser at: {cdp_url}")
 
     orchestrator = Orchestrator(
-        headless=False, debug_mode=False, llm_provider=provider, llm_model=model
+        headless=False,
+        debug_mode=False,
+        llm_provider=provider,
+        llm_model=model,
+        cdp_url=cdp_url,
     )
 
     # Пример запроса

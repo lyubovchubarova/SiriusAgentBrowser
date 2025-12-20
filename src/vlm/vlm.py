@@ -85,6 +85,93 @@ class VisionAgent:
 
         self._last_mouse_pos = (float(target_x), float(target_y))
 
+    def _check_captcha(self, page: Page) -> bool:
+        """Checks for common CAPTCHA indicators."""
+        try:
+            # Fast check in title
+            title = page.title().lower()
+            if (
+                "captcha" in title
+                or "bot" in title
+                or "human" in title
+                or "security check" in title
+            ):
+                return True
+
+            # Check for specific elements (Cloudflare, reCAPTCHA frames)
+            if page.locator("iframe[src*='cloudflare']").count() > 0:
+                return True
+            return page.locator("iframe[src*='recaptcha']").count() > 0
+        except Exception:
+            return False
+
+    def _human_type(self, page: Page, text: str) -> None:
+        """Types text with variable delay."""
+        for char in text:
+            delay = random.uniform(0.05, 0.15)
+            page.keyboard.type(char)
+            time.sleep(delay)
+
+    def _solve_captcha(self, page: Page) -> None:
+        """Attempts to solve CAPTCHA automatically by clicking checkboxes."""
+        print("Attempting to solve CAPTCHA automatically...")
+        time.sleep(2)  # Wait for load
+
+        # Try to find and click the checkbox
+        clicked = False
+
+        # 1. Search in frames (ReCaptcha / Cloudflare)
+        for frame in page.frames:
+            try:
+                if (
+                    "cloudflare" in frame.url
+                    or "turnstile" in frame.url
+                    or "recaptcha" in frame.url
+                ):
+                    # Common selectors for the checkbox
+                    checkboxes = [
+                        "input[type='checkbox']",
+                        ".recaptcha-checkbox-border",
+                        ".ctp-checkbox-label",
+                        "#checkbox",
+                    ]
+                    for sel in checkboxes:
+                        el = frame.locator(sel).first
+                        if el.is_visible():
+                            print(
+                                f"Found CAPTCHA checkbox ({sel}) in frame. Clicking..."
+                            )
+                            # Add delay
+                            time.sleep(random.uniform(1, 2))
+                            el.click()
+                            clicked = True
+                            break
+                if clicked:
+                    break
+            except Exception:
+                continue
+
+        if not clicked:
+            # 2. Search in main page (Custom or Shadow DOM)
+            try:
+                # Look for "I am not a robot" text or similar
+                labels = page.get_by_text("I am not a robot")
+                if labels.count() > 0 and labels.first.is_visible():
+                    print("Found 'I am not a robot' text. Clicking...")
+                    labels.first.click()
+                    clicked = True
+            except Exception:
+                pass
+
+        if clicked:
+            print("Captcha interaction performed. Waiting 5s for results...")
+            time.sleep(5)
+        else:
+            print(
+                "Automatic solution failed (no checkbox found). Pausing for manual solving..."
+            )
+            time.sleep(15)
+
     def _mark_page(self, page: Page) -> int:
         """
         Injects JavaScript to draw numbered boxes on interactive elements (Set-of-Marks).
@@ -249,14 +336,44 @@ class VisionAgent:
 
         return True, "Verified"
 
-    def execute_step(self, step: Step, page: Page) -> str:
+    def _force_same_tab(self, page: Page) -> None:
+        """Removes target='_blank' from all links to force opening in the same tab."""
+        try:
+            page.evaluate(
+                """
+                () => {
+                    document.querySelectorAll('a[target="_blank"]').forEach(a => a.removeAttribute('target'));
+                }
+            """
+            )
+        except Exception:
+            pass
+
+    def execute_step(
+        self, step: Step, page: Page, check_stop_callback: Any = None
+    ) -> str:
         """
         Выполняет один шаг плана.
         """
+        if check_stop_callback and check_stop_callback():
+            return "Execution stopped by user."
+
         print(f"Executing step {step.step_id}: {step.action} - {step.description}")
+
+        # Pre-step: Check for CAPTCHA
+        if self._check_captcha(page):
+            self._solve_captcha(page)
 
         # Pre-step: Handle popups/cookies
         self._handle_popups(page)
+
+        # Pre-step: Force same tab (unless explicitly requested otherwise)
+        # If the step description mentions "new tab" or "new window", we skip this enforcement.
+        if (
+            "new tab" not in step.description.lower()
+            and "new window" not in step.description.lower()
+        ):
+            self._force_same_tab(page)
 
         # 0. Check for ID-based execution (Highest Priority)
         # Looks for [E123] pattern
@@ -303,9 +420,11 @@ class VisionAgent:
                             element.click(timeout=3000, force=True)
 
                         try:
-                            page.wait_for_load_state("domcontentloaded", timeout=5000)
+                            # Short wait for DOM content loaded, but don't block long
+                            page.wait_for_load_state("domcontentloaded", timeout=2000)
                         except Exception:
-                            time.sleep(1)
+                            # If timeout, assume page is ready enough or didn't reload
+                            pass
                         return f"Clicked element {element_id} (ID-based)"
 
                     elif step.action == "type":
@@ -354,7 +473,8 @@ class VisionAgent:
                         return f"Failed to navigate: Invalid URL '{url}'"
 
                     try:
-                        page.goto(url, timeout=30000)
+                        # Use domcontentloaded to speed up navigation
+                        page.goto(url, timeout=30000, wait_until="domcontentloaded")
                         self._handle_popups(page)
                         return f"Navigated to {url}"
                     except Exception as e:
@@ -398,7 +518,7 @@ class VisionAgent:
 
                 if query:
                     search_url = f"https://www.google.com/search?q={query}"
-                    page.goto(search_url)
+                    page.goto(search_url, wait_until="domcontentloaded")
                     return f"Navigated to Google Search for '{query}'. You are now on the search results page. DO NOT navigate again. CLICK on a relevant result link."
 
                 return "Failed to navigate: No URL found"
@@ -452,6 +572,8 @@ class VisionAgent:
                 if not search_input and self.vlm.client:
                     print("Trying VLM visual search for input field...")
                     try:
+                        if check_stop_callback and check_stop_callback():
+                            return "Execution stopped by user."
                         self._mark_page(page)
                         screenshot_path = "screenshots/type_target.png"
                         page.screenshot(path=screenshot_path)
@@ -461,6 +583,7 @@ class VisionAgent:
                             screenshot_path,
                             "Click on the search input field or text box",
                         )
+                        print(f"[VLM LOG] VLM Response for 'type' target: {vlm_resp}")
                         match = re.search(r":id:(\d+):", vlm_resp)
                         if match:
                             el_id = int(match.group(1))
@@ -480,7 +603,7 @@ class VisionAgent:
 
                         search_input.click()
                         search_input.fill("")  # Clear first
-                        search_input.type(text_to_type, delay=100)
+                        self._human_type(page, text_to_type)
                         page.keyboard.press("Enter")
                         time.sleep(3)
                         return f"Typed '{text_to_type}' into {found_sel}"
@@ -490,7 +613,7 @@ class VisionAgent:
 
                 # Fallback: blind typing
                 try:
-                    page.keyboard.type(text_to_type)
+                    self._human_type(page, text_to_type)
                     page.keyboard.press("Enter")
                     time.sleep(3)
                     return f"Typed '{text_to_type}' blindly"
@@ -662,11 +785,13 @@ class VisionAgent:
 
                                 found_element.click(timeout=5000)
                                 try:
+                                    # Short wait for DOM content loaded
                                     page.wait_for_load_state(
-                                        "domcontentloaded", timeout=5000
+                                        "domcontentloaded", timeout=2000
                                     )
                                 except Exception:
-                                    time.sleep(2)
+                                    # Proceed if timeout
+                                    pass
                                 return f"Clicked '{target_text}'"
                             except Exception as e:
                                 err_msg = str(e)
@@ -696,6 +821,8 @@ class VisionAgent:
 
                     # Retry loop for VLM click (scroll and retry)
                     for attempt in range(2):
+                        if check_stop_callback and check_stop_callback():
+                            return "Execution stopped by user."
                         try:
                             # 1. Mark elements
                             self._mark_page(page)
@@ -712,7 +839,10 @@ class VisionAgent:
                                 screenshot_path, step.description
                             )
                             print(
-                                f"VLM SoM Response (Attempt {attempt + 1}): {vlm_resp}"
+                                f"[VLM LOG] VLM SoM Response (Attempt {attempt + 1}): {vlm_resp}"
+                            )
+                            print(
+                                f"[VLM LOG] Parsed Action: {'Target Found' if ':id:' in vlm_resp else 'Target Not Found'}"
                             )
 
                             if ":not_found:" in vlm_resp:
@@ -790,6 +920,8 @@ class VisionAgent:
                 if self.vlm.client:
                     print("Trying VLM visual hover (Set-of-Marks)...")
                     try:
+                        if check_stop_callback and check_stop_callback():
+                            return "Execution stopped by user."
                         self._mark_page(page)
                         screenshot_path = "screenshots/hover_target.png"
                         page.screenshot(path=screenshot_path)
@@ -798,6 +930,7 @@ class VisionAgent:
                         vlm_resp = self.vlm.get_target_id(
                             screenshot_path, step.description
                         )
+                        print(f"[VLM LOG] VLM Response for 'hover' target: {vlm_resp}")
                         match = re.search(r":id:(\d+):", vlm_resp)
                         if match:
                             el_id = int(match.group(1))

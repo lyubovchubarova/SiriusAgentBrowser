@@ -57,6 +57,10 @@ class VLMAgent:
         if not self.client:
             return "Error: VLM client not initialized"
 
+        print("\n[VLM LOG] Sending request to VLM...")
+        print(f"[VLM LOG] System Prompt: {system_prompt[:100]}...")
+        print(f"[VLM LOG] User Prompt: {user_prompt}")
+
         for attempt in range(3):
             try:
                 base64_image = self._encode_image(image_path)
@@ -83,7 +87,9 @@ class VLMAgent:
                     temperature=0.1,
                     max_tokens=1000,
                 )
-                return response.choices[0].message.content or ""
+                result = response.choices[0].message.content or ""
+                print(f"[VLM LOG] VLM Response: {result}")
+                return result
             except Exception as e:
                 print(f"VLM call failed (attempt {attempt + 1}/3): {e}")
                 time.sleep(2)

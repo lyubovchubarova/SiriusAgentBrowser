@@ -23,6 +23,9 @@ class BrowserOptions:
     browser_name: str = "chromium"  # chromium | firefox | webkit
     slow_mo_ms: int = 0  # для дебага, например 200
     viewport: ViewportSize | None = None  # {"width": 1280, "height": 720}
+    cdp_url: str | None = (
+        None  # URL для подключения к существующему браузеру (например, http://localhost:9222)
+    )
 
 
 class BrowserController:
@@ -39,33 +42,124 @@ class BrowserController:
             raise RuntimeError("Browser is not started. Call start() first.")
         return self._page
 
+    def is_extension_installed(self, name: str) -> bool:
+        """
+        Проверяет, установлено ли расширение с заданным именем.
+        Использует CDP Target.getTargets.
+        """
+        if not self._browser:
+            return False
+
+        try:
+            # Подключаемся к CDP на уровне браузера
+            # Note: connect_over_cdp returns a Browser, which supports new_browser_cdp_session
+            # But standard launch() might not expose it easily in all versions without args.
+            # However, since we are mostly interested in the 'connect_over_cdp' case for the extension check:
+
+            # For connect_over_cdp (which we use for the agent), this should work.
+            # If it fails, we might need to try context-level session.
+            try:
+                client = self._browser.new_browser_cdp_session()
+            except Exception:
+                # Fallback: try to get session from a page if available
+                if self._context and self._context.pages:
+                    client = self._context.new_cdp_session(self._context.pages[0])
+                elif self._page and self._context:
+                    client = self._context.new_cdp_session(self._page)
+                else:
+                    # Create a temp page to get CDP access if needed?
+                    # Better to just return False or log warning if we can't get CDP.
+                    print("Could not create CDP session to check extensions.")
+                    return False
+
+            targets = client.send("Target.getTargets")
+
+            # Debug output to understand what targets are visible
+            print(f"DEBUG: Checking targets for extension '{name}'")
+            found_titles = []
+            for target in targets.get("targetInfos", []):
+                t_title = target.get("title", "")
+                t_type = target.get("type", "")
+                t_url = target.get("url", "")
+                found_titles.append(f"[{t_type}] {t_title} ({t_url})")
+
+                # Check by title
+                if name in t_title:
+                    try:
+                        client.detach()
+                    except Exception:
+                        pass
+                    return True
+
+                # Check by URL (fallback if title is missing or different)
+                # Our extension has sidepanel.html and offscreen.html
+                if "chrome-extension://" in t_url and (
+                    "sidepanel.html" in t_url or "offscreen.html" in t_url
+                ):
+                    # Double check if it might be another extension?
+                    # But usually we only have one sidepanel.html active for this agent.
+                    # Let's assume it's ours if we can't match by name.
+                    print(f"DEBUG: Found extension by URL: {t_url}")
+                    try:
+                        client.detach()
+                    except Exception:
+                        pass
+                    return True
+
+            # Only print if not found to avoid spam when working
+            print(f"DEBUG: Extension not found. Visible targets: {found_titles}")
+
+            try:
+                client.detach()
+            except Exception:
+                pass
+
+        except Exception as e:
+            print(f"Error checking extension: {e}")
+            return False
+
+        return False
+
     def start(self) -> BrowserController:
         if self._browser:
             return self
 
         self._pw = sync_playwright().start()
 
-        browser_type = getattr(self._pw, self.options.browser_name, None)
-        if browser_type is None:
-            raise ValueError(f"Unknown browser_name: {self.options.browser_name}")
+        if self.options.cdp_url:
+            print(f"Connecting to existing browser at {self.options.cdp_url}")
+            # Подключаемся к существующему браузеру через CDP
+            self._browser = self._pw.chromium.connect_over_cdp(self.options.cdp_url)
 
-        self._browser = browser_type.launch(
-            headless=self.options.headless,
-            slow_mo=self.options.slow_mo_ms,
-            args=[
-                "--disable-blink-features=AutomationControlled",
-                "--no-sandbox",
-                "--disable-infobars",
-                "--disable-dev-shm-usage",
-                "--disable-browser-side-navigation",
-                "--disable-gpu",
-            ],
-        )
+            # Пытаемся использовать существующий контекст или создаем новый
+            if self._browser.contexts:
+                self._context = self._browser.contexts[0]
+            else:
+                self._context = self._browser.new_context(
+                    viewport=self.options.viewport
+                )
+        else:
+            browser_type = getattr(self._pw, self.options.browser_name, None)
+            if browser_type is None:
+                raise ValueError(f"Unknown browser_name: {self.options.browser_name}")
 
-        self._context = self._browser.new_context(
-            viewport=self.options.viewport,
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        )
+            self._browser = browser_type.launch(
+                headless=self.options.headless,
+                slow_mo=self.options.slow_mo_ms,
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--no-sandbox",
+                    "--disable-infobars",
+                    "--disable-dev-shm-usage",
+                    "--disable-browser-side-navigation",
+                    "--disable-gpu",
+                ],
+            )
+
+            self._context = self._browser.new_context(
+                viewport=self.options.viewport,
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            )
 
         # Inject cursor visualization
         js_cursor = """
@@ -101,15 +195,62 @@ class BrowserController:
         """
         self._context.add_init_script(js_cursor)
 
-        # Anti-detection script
+        # Anti-detection script (Stealth Mode)
         js_stealth = """
+            // 1. Pass the Webdriver Test.
             Object.defineProperty(navigator, 'webdriver', {
                 get: () => undefined
+            });
+
+            // 2. Pass the Chrome Test.
+            if (!window.chrome) {
+                window.chrome = {
+                    runtime: {}
+                };
+            }
+
+            // 3. Pass the Permissions Test.
+            const originalQuery = window.navigator.permissions.query;
+            window.navigator.permissions.query = (parameters) => (
+                parameters.name === 'notifications' ?
+                Promise.resolve({ state: 'denied' }) :
+                originalQuery(parameters)
+            );
+
+            // 4. Pass the Plugins Test.
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [1, 2, 3, 4, 5],
+            });
+
+            // 5. Pass the Languages Test.
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['en-US', 'en'],
             });
         """
         self._context.add_init_script(js_stealth)
 
-        self._page = self._context.new_page()
+        # Try to use an existing page instead of opening a new blank one
+        if self._context.pages:
+            # Filter out extension pages (background pages, side panels, etc.)
+            # They usually have 'chrome-extension://' scheme
+            valid_pages = [
+                p
+                for p in self._context.pages
+                if not p.url.startswith("chrome-extension://")
+                and not p.url.startswith("devtools://")
+            ]
+
+            if valid_pages:
+                # Use the most recently active VALID page
+                self._page = valid_pages[-1]
+                print(f"Attached to existing page: {self._page.url}")
+            else:
+                # If only extension pages exist, create a new normal page
+                print("Only extension pages found. Creating new page.")
+                self._page = self._context.new_page()
+        else:
+            self._page = self._context.new_page()
+
         return self
 
     def get_element_details(self, selector: str) -> str:
@@ -206,8 +347,9 @@ class BrowserController:
             'textarea',
             'select',
             '[role="button"]',
-            '[role="link"]',
-            '[onclick]',
+            '[role="link"]',            '[role="checkbox"]',
+            '[role="radio"]',
+            '[role="tab"]',            '[onclick]',
             '[tabindex]:not([tabindex="-1"])'
           ];
 
@@ -220,7 +362,8 @@ class BrowserController:
             if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
 
             const r = el.getBoundingClientRect();
-            if (r.width < 2 || r.height < 2) return false;
+            // Smart Filtering: Increase min size to avoid noise (was 2x2)
+            if (r.width < 8 || r.height < 8) return false;
 
             // строго в пределах viewport (мы рисуем только по видимой части)
             if (r.bottom <= 0 || r.right <= 0) return false;
@@ -258,6 +401,7 @@ class BrowserController:
           let idx = 1;
           for (const el of nodes) {
             if (!isVisible(el)) continue;
+            if (el.getAttribute('aria-hidden') === 'true') continue;
 
             const r = el.getBoundingClientRect();
 
@@ -269,16 +413,28 @@ class BrowserController:
 
             const w = x2 - x;
             const h = y2 - y;
-            if (w < 2 || h < 2) continue;
+            
+            // Smart Filtering: Double check size after clamping
+            if (w < 8 || h < 8) continue;
 
             const id = `E${idx++}`;
             el.dataset.pwBboxId = id;
+
+            const attrs = {};
+            if (el.tagName.toLowerCase() === 'a') {
+                attrs.href = el.getAttribute('href') || '';
+            }
+            if (el.tagName.toLowerCase() === 'input') {
+                attrs.placeholder = el.getAttribute('placeholder') || '';
+                attrs.value = el.value || '';
+            }
 
             out.push({
               id,
               type: getType(el),
               text: getText(el),
-              bbox: { x, y, w, h }
+              bbox: { x, y, w, h },
+              attributes: attrs
             });
 
             if (out.length >= 2000) break;

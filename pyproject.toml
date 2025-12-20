@@ -44,6 +44,7 @@ ignore = [
     "RUF002", # ambiguous characters in docstrings (Cyrillic OK)
     "RUF003", # ambiguous characters in comments (Cyrillic OK)
     "SIM105", # use contextlib.suppress (try-except-pass is fine)
+    "W293",   # blank line contains whitespace
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -80,7 +81,13 @@ module = ["tests.*"]
 disallow_untyped_defs = false
 
 [[tool.mypy.overrides]]
-module = ["PIL.*", "playwright.*"]
+module = [
+    "PIL.*",
+    "playwright.*",
+    "fastapi.*",
+    "uvicorn.*",
+    "dotenv.*"
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
