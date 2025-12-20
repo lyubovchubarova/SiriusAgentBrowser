@@ -156,7 +156,7 @@ class Planner:
 
         if self.provider == "yandex":
             # Use standard OpenAI-compatible API for Yandex
-print(f"\n[PLANNER LOG] Sending request to LLM (Streamed) with Reasoning...")
+            print(f"\n[PLANNER LOG] Sending request to LLM (Streamed) with Reasoning...")
             
             try:
                 response = self.client.chat.completions.create(
