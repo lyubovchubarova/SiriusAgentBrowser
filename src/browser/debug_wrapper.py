@@ -1,5 +1,7 @@
-from typing import Any, Callable
-from playwright.sync_api import Page, Locator, Keyboard, Mouse, FrameLocator
+from collections.abc import Callable
+from typing import Any
+
+from playwright.sync_api import FrameLocator, Keyboard, Locator, Mouse
 
 
 class DebugWrapper:
@@ -21,8 +23,10 @@ class DebugWrapper:
 
         return attr
 
-    def _wrap_method(self, method: Callable, method_name: str) -> Callable:
-        def wrapper(*args, **kwargs):
+    def _wrap_method(
+        self, method: Callable[..., Any], method_name: str
+    ) -> Callable[..., Any]:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             # Actions that perform changes or navigation
             action_methods = [
                 "goto",
@@ -41,7 +45,7 @@ class DebugWrapper:
             ]
 
             # Methods that return objects we need to wrap
-            locator_methods = ["locator", "frame_locator", "first", "last", "nth"]
+            # locator_methods = ["locator", "frame_locator", "first", "last", "nth"]
 
             is_action = method_name in action_methods
 

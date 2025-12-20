@@ -1,12 +1,10 @@
 import base64
 import os
-import time
 import re
+import time
 from pathlib import Path
-from typing import Optional
 
 import openai
-from PIL import Image
 
 VERIFY_SYSTEM_PROMPT = """
 Ты — визуальный ассистент для проверки выполнения действий в браузере.
@@ -23,7 +21,7 @@ FALSE: Страница пустая, ожидаемый текст не най�
 
 
 class VLMAgent:
-    def __init__(self, token: str = None, folder_id: str = None) -> None:
+    def __init__(self, token: str | None = None, folder_id: str | None = None) -> None:
         self.token = token or os.getenv("YANDEX_CLOUD_API_KEY")
         self.folder_id = folder_id or os.getenv("YANDEX_CLOUD_FOLDER")
 
@@ -52,7 +50,7 @@ class VLMAgent:
             self.click_system_prompt = "You are a clicker agent."
 
     def _encode_image(self, image_path: str) -> str:
-        with open(image_path, "rb") as image_file:
+        with Path(image_path).open("rb") as image_file:
             return base64.b64encode(image_file.read()).decode("utf-8")
 
     def _call_vlm(self, image_path: str, system_prompt: str, user_prompt: str) -> str:
@@ -87,7 +85,7 @@ class VLMAgent:
                 )
                 return response.choices[0].message.content or ""
             except Exception as e:
-                print(f"VLM call failed (attempt {attempt+1}/3): {e}")
+                print(f"VLM call failed (attempt {attempt + 1}/3): {e}")
                 time.sleep(2)
 
         return "Error calling VLM: Max retries exceeded"

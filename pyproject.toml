@@ -40,8 +40,10 @@ select = [
 ]
 ignore = [
     "E501",   # line too long (handled by formatter)
-    "RUF002", # ambiguous characters in docstrings (кириллица OK)
-    "RUF003", # ambiguous characters in comments (кириллица OK)
+    "RUF001", # ambiguous characters in strings (Cyrillic OK)
+    "RUF002", # ambiguous characters in docstrings (Cyrillic OK)
+    "RUF003", # ambiguous characters in comments (Cyrillic OK)
+    "SIM105", # use contextlib.suppress (try-except-pass is fine)
 ]
 
 [tool.ruff.lint.per-file-ignores]

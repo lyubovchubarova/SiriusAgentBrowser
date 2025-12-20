@@ -3,7 +3,8 @@ import re
 
 import dotenv
 import pydantic
-from agent import VLMAgent
+
+from .agent import VLMAgent
 
 
 class ClickModel(pydantic.BaseModel):
@@ -12,9 +13,9 @@ class ClickModel(pydantic.BaseModel):
     @pydantic.field_validator("value")
     @classmethod
     def validate_format(cls, v: str) -> str:
-        pattern = r"^:click:(-?\d+):(-?\d+):$"
+        pattern = r"^:id:(\d+):$"
         if not re.match(pattern, v):
-            raise ValueError("Строка должна быть в формате :<click>:<x>:<y>:")
+            raise ValueError("Строка должна быть в формате :id:<number>:")
         return v
 
 
@@ -29,12 +30,11 @@ if __name__ == "__main__":
     vision_agent: VLMAgent = VLMAgent(
         token=os.getenv("YANDEX_GPT_API_TOKEN", ""),
         folder_id=os.getenv("YANDEX_CLOUD_FOLDER_ID", ""),
-        system_prompt="system_prompt.txt"
     )
     image_url = (
         "C:\\Users\\maxim\\PycharmProjects\\SiriusAgentBrowser\\screenshots\\wiki.png"
     )
     prompt = "кликни скачать на андроид"
-    response = vision_agent.request(image_url, prompt)
+    response = vision_agent.get_target_id(image_url, prompt)
     print(response)
     ClickModel.validate_format(response)

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from PIL import Image, ImageDraw, ImageFont
 from playwright.sync_api import (
@@ -11,7 +12,6 @@ from playwright.sync_api import (
     BrowserContext,
     Page,
     Playwright,
-    TimeoutError as PlaywrightTimeoutError,
     ViewportSize,
     sync_playwright,
 )
@@ -52,11 +52,89 @@ class BrowserController:
         self._browser = browser_type.launch(
             headless=self.options.headless,
             slow_mo=self.options.slow_mo_ms,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-infobars",
+                "--disable-dev-shm-usage",
+                "--disable-browser-side-navigation",
+                "--disable-gpu",
+            ],
         )
 
-        self._context = self._browser.new_context(viewport=self.options.viewport)
+        self._context = self._browser.new_context(
+            viewport=self.options.viewport,
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        )
+
+        # Inject cursor visualization
+        js_cursor = """
+            window.addEventListener('DOMContentLoaded', () => {
+                if (document.getElementById('playwright-cursor')) return;
+                const cursor = document.createElement('div');
+                cursor.id = 'playwright-cursor';
+                cursor.style.position = 'fixed';
+                cursor.style.top = '0';
+                cursor.style.left = '0';
+                cursor.style.width = '20px';
+                cursor.style.height = '20px';
+                cursor.style.backgroundColor = 'rgba(255, 0, 0, 0.5)';
+                cursor.style.borderRadius = '50%';
+                cursor.style.pointerEvents = 'none';
+                cursor.style.zIndex = '2147483647';
+                cursor.style.transition = 'transform 0.1s ease';
+                document.body.appendChild(cursor);
+
+                document.addEventListener('mousemove', (e) => {
+                    cursor.style.transform = `translate(${e.clientX - 10}px, ${e.clientY - 10}px)`;
+                });
+
+                document.addEventListener('click', () => {
+                    cursor.style.backgroundColor = 'rgba(0, 255, 0, 0.5)';
+                    cursor.style.transform += ' scale(0.8)';
+                    setTimeout(() => {
+                        cursor.style.backgroundColor = 'rgba(255, 0, 0, 0.5)';
+                        cursor.style.transform = cursor.style.transform.replace(' scale(0.8)', '');
+                    }, 150);
+                });
+            });
+        """
+        self._context.add_init_script(js_cursor)
+
+        # Anti-detection script
+        js_stealth = """
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined
+            });
+        """
+        self._context.add_init_script(js_stealth)
+
         self._page = self._context.new_page()
         return self
+
+    def get_element_details(self, selector: str) -> str:
+        """
+        Returns details about an element (text, outerHTML) for inspection.
+        """
+        try:
+            # Try ID first if it looks like E123
+            if re.match(r"^E\d+$", selector):
+                loc = self.page.locator(f"[data-pw-bbox-id='{selector}']").first
+            else:
+                loc = self.page.locator(selector).first
+
+            if not loc.is_visible():
+                return f"Element '{selector}' not visible or not found."
+
+            text = loc.text_content() or ""
+            html = loc.evaluate("el => el.outerHTML")
+            # Truncate HTML if too long
+            if len(html) > 1000:
+                html = html[:1000] + "... (truncated)"
+
+            return f"Element Details:\nText: {text.strip()}\nHTML Snippet: {html}"
+        except Exception as e:
+            return f"Error inspecting '{selector}': {e}"
 
     def open(
         self,
@@ -80,9 +158,9 @@ class BrowserController:
         Useful for LLM planning.
         """
         try:
-            snapshot = self.page.accessibility.snapshot()
+            snapshot = self.page.accessibility.snapshot()  # type: ignore
 
-            def process_node(node, depth=0):
+            def process_node(node: dict[str, Any], depth: int = 0) -> str:
                 indent = "  " * depth
                 role = node.get("role", "unknown")
                 name = node.get("name", "")
@@ -367,7 +445,7 @@ class BrowserController:
         """
         self.page.mouse.wheel(0, delta_y)
 
-    def refresh_bbox_ids(self, max_elements: int = 400) -> dict:
+    def refresh_bbox_ids(self, max_elements: int = 400) -> dict[str, Any]:
         """
         Важно: после скролла/перехода id могут исчезнуть.
         Этот метод заново находит кликабельные элементы и проставляет им data-pw-bbox-id.
@@ -460,4 +538,4 @@ class BrowserController:
           };
         }
         """
-        return self.page.evaluate(js, max_elements)
+        return cast("dict[str, Any]", self.page.evaluate(js, max_elements))

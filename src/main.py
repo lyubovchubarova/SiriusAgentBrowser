@@ -1,10 +1,11 @@
 import logging
 import os
 import sys
+from pathlib import Path
 
 from dotenv import load_dotenv
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from src.orchestrator import Orchestrator
 
@@ -16,7 +17,7 @@ logging.basicConfig(
 )
 
 
-def main():
+def main() -> None:
     # Загружаем переменные окружения (.env)
     load_dotenv()
 
@@ -38,7 +39,7 @@ def main():
     )
 
     # Пример запроса
-    user_query = "Найди в википедии статью о Бертране расселе и выпиши даты его жизни"
+    user_query = "Найди на хабре статью про BeRT и скопируй ее содержимое"
 
     print(f"User Query: {user_query}")
     print("-" * 50)

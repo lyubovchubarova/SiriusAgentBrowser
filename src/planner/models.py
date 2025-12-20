@@ -2,7 +2,9 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-Action = Literal["navigate", "click", "type", "scroll", "extract", "hover"]
+Action = Literal[
+    "navigate", "click", "type", "scroll", "extract", "hover", "inspect", "wait"
+]
 
 
 class Step(BaseModel):
@@ -15,8 +17,12 @@ class Step(BaseModel):
 class Plan(BaseModel):
     reasoning: str = Field(..., description="Chain-of-thought reasoning for the plan")
     task: str = Field(..., min_length=3, max_length=200)
-    steps: list[Step] = Field(..., min_length=1, max_length=10)  # <= 10 шагов
+    steps: list[Step] = Field(..., min_length=0, max_length=10)  # <= 10 шагов
     estimated_time: int = Field(..., ge=1, le=60 * 60)  # seconds
+    needs_vision: bool = Field(
+        default=False,
+        description="Set to true if DOM is insufficient and a screenshot is needed to plan.",
+    )
 
     @model_validator(mode="after")
     def validate_steps(self) -> "Plan":

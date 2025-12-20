@@ -1,13 +1,14 @@
 import logging
-import json
-from typing import Optional
+from typing import TYPE_CHECKING, Any
 
 from src.browser.browser_controller import BrowserController, BrowserOptions
 from src.browser.debug_wrapper import DebugWrapper
-from src.planner.planner import Planner
-from src.planner.models import Plan
-from src.vlm.vlm import VisionAgent
 from src.memory.long_term_memory import LongTermMemory
+from src.planner.planner import Planner
+from src.vlm.vlm import VisionAgent
+
+if TYPE_CHECKING:
+    from src.planner.models import Plan
 
 logger = logging.getLogger(__name__)
 
@@ -27,13 +28,13 @@ class Orchestrator:
         self._is_browser_started = False
         self.debug_mode = debug_mode
 
-    def start_browser(self):
+    def start_browser(self) -> None:
         if not self._is_browser_started:
             self.browser_controller.start()
             self._is_browser_started = True
             logger.info("Browser started.")
 
-    def close_browser(self):
+    def close_browser(self) -> None:
         if self._is_browser_started:
             self.browser_controller.close()
             self._is_browser_started = False
@@ -53,20 +54,20 @@ class Orchestrator:
         try:
             # 1. Планирование
             logger.info("Creating plan...")
-            
+
             # Retrieve memory context
             memory_context = ""
             # We don't have a URL yet, so we can't fetch domain-specific memory easily
             # But we can try if the user request contains a URL
             # For now, let's skip initial memory or try to guess domain from request?
             # Better: Pass empty memory first, and update plan with memory later when we have a URL.
-            
+
             plan: Plan = self.planner.create_plan(user_request)
             logger.info(f"Plan created: {plan.task} ({len(plan.steps)} steps)")
 
             # 2. Запуск браузера
             self.start_browser()
-            page = self.browser_controller.page
+            page: Any = self.browser_controller.page
 
             if self.debug_mode:
                 page = DebugWrapper(page)
@@ -137,7 +138,7 @@ class Orchestrator:
                     formatted_elements = []
                     for el in elements[:100]:
                         formatted_elements.append(
-                            f"[{el['id']}] {el['type']} \"{el['text']}\""
+                            f'[{el["id"]}] {el["type"]} "{el["text"]}"'
                         )
                     dom_str = "\n".join(formatted_elements)
 
@@ -150,12 +151,14 @@ class Orchestrator:
                     dom_str += f"\n\nAccessibility Tree (Semantic View):\n{ax_tree}"
 
                     current_url = page.url
-                    
+
                     # Retrieve Memory Context
-                    memory_context = self.memory.retrieve_relevant(current_url, user_request)
+                    memory_context = self.memory.retrieve_relevant(
+                        current_url, user_request
+                    )
                     if memory_context:
                         logger.info("Memory context retrieved.")
-                        
+
                 except Exception as e:
                     logger.error(f"Failed to capture state: {e}")
                     dom_str = "Error capturing DOM"
@@ -188,6 +191,16 @@ class Orchestrator:
 
                         if fail_count >= 2:
                             cycle_warning = "CRITICAL: You are repeatedly failing with the same action. You MUST change strategy. Do NOT try the same action again."
+                            # Human-in-the-loop: Ask user for help if stuck
+                            print("\n" + "!" * 50)
+                            print("AGENT IS STUCK. Please provide a hint or strategy.")
+                            print(f"Last error: {last_entry['result']}")
+                            user_hint = input(
+                                "Your hint (or press Enter to continue): "
+                            )
+                            if user_hint.strip():
+                                cycle_warning += f"\nUSER HINT: {user_hint}"
+                            print("!" * 50 + "\n")
 
                     # Check previous entries for exact duplicates
                     if not cycle_warning:
@@ -222,11 +235,12 @@ class Orchestrator:
                     # Inject memory into history or a new field?
                     # Planner.update_plan takes specific args. Let's append memory to history for now or modify Planner.
                     # Let's append to history_str as it's the easiest way to pass context without changing signature too much
-                    
+
                     full_context_str = history_str
                     if memory_context:
                         full_context_str += f"\n\n{memory_context}"
-                    
+
+                    # 1. Try planning with DOM only (Priority to DOM)
                     new_plan = self.planner.update_plan(
                         task=user_request,
                         last_step_desc=step.description,
@@ -235,6 +249,57 @@ class Orchestrator:
                         dom_elements=dom_str,
                         history=full_context_str,
                     )
+
+                    # 2. Check if Planner requested vision
+                    if new_plan.needs_vision:
+                        logger.info(
+                            "Planner requested vision (screenshot). Retrying with screenshot..."
+                        )
+                        screenshot_path = "screenshots/planning_context.png"
+                        self.browser_controller.screenshot(
+                            screenshot_path, viewport_only=True
+                        )
+
+                        new_plan = self.planner.update_plan(
+                            task=user_request,
+                            last_step_desc=step.description,
+                            last_step_result=result,
+                            current_url=current_url,
+                            dom_elements=dom_str,
+                            history=full_context_str,
+                            screenshot_path=screenshot_path,
+                        )
+
+                    # 3. Critique Step (Self-Correction)
+                    # Only critique if plan is not empty and not just "extract"
+                    if new_plan.steps and not (
+                        len(new_plan.steps) == 1
+                        and new_plan.steps[0].action == "extract"
+                    ):
+                        is_valid, critique = self.planner.critique_plan(
+                            new_plan, full_context_str
+                        )
+                        if not is_valid:
+                            logger.warning(
+                                f"Plan critique failed: {critique}. Requesting fix..."
+                            )
+                            # Add critique to history and replan
+                            full_context_str += (
+                                f"\nCRITIQUE: {critique}\nPlease fix the plan."
+                            )
+
+                            # Re-run update_plan with critique
+                            new_plan = self.planner.update_plan(
+                                task=user_request,
+                                last_step_desc=step.description,
+                                last_step_result=result,
+                                current_url=current_url,
+                                dom_elements=dom_str,
+                                history=full_context_str,
+                                screenshot_path=(
+                                    screenshot_path if new_plan.needs_vision else None
+                                ),
+                            )
 
                     # Check if task is completed
                     # Heuristic: if plan is empty or has a "finish" step
@@ -261,13 +326,22 @@ class Orchestrator:
                     # If replan fails, we are stuck.
                     break
 
+            # Generate human-readable summary
+            try:
+                history_text = "\n".join(results)
+                summary = self.planner.generate_summary(user_request, history_text)
+                results.append(f"\n--- FINAL RESULT ---\n{summary}")
+                logger.info(f"Final Summary: {summary}")
+            except Exception as e:
+                logger.error(f"Failed to generate summary: {e}")
+
             # Save successful experience to memory
             if execution_history and "Failed" not in execution_history[-1]["result"]:
-                 # Only save if the last step wasn't a failure (heuristic)
-                 # Ideally we need a "Task Completed" signal
-                 last_url = execution_history[-1]["url"]
-                 self.memory.add_experience(last_url, user_request, execution_history)
-                 logger.info("Experience saved to long-term memory.")
+                # Only save if the last step wasn't a failure (heuristic)
+                # Ideally we need a "Task Completed" signal
+                last_url = execution_history[-1]["url"]
+                self.memory.add_experience(last_url, user_request, execution_history)
+                logger.info("Experience saved to long-term memory.")
 
             return "\n".join(results)
 
@@ -277,4 +351,3 @@ class Orchestrator:
         finally:
             # self.close_browser()
             pass
-
