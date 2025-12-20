@@ -281,19 +281,19 @@ class Planner:
         """
         prompt = f"""
         You are a critical reviewer for browser automation plans.
-        
+
         Context:
         {context}
-        
+
         Proposed Plan:
         {plan.model_dump_json(indent=2)}
-        
+
         Analyze the plan for:
         1. Logical consistency (e.g., clicking a button that doesn't exist in context).
         2. Redundancy (repeating steps).
         3. Safety (avoiding infinite loops).
         4. Completeness (does it address the user task?).
-        
+
         If the plan is good, return "VALID".
         If the plan has issues, return "INVALID: <reason>".
         """
