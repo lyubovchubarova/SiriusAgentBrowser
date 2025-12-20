@@ -49,7 +49,9 @@ class Orchestrator:
             self._is_browser_started = False
             logger.info("Browser closed.")
 
-    def process_request(self, user_request: str) -> str:
+    def process_request(
+        self, user_request: str, chat_history: list[dict[str, str]] | None = None
+    ) -> str:
         """
         Обрабатывает пользовательский запрос.
 
@@ -73,7 +75,7 @@ class Orchestrator:
             # For now, let's skip initial memory or try to guess domain from request?
             # Better: Pass empty memory first, and update plan with memory later when we have a URL.
 
-            plan: Plan = self.planner.create_plan(user_request)
+            plan: Plan = self.planner.create_plan(user_request, chat_history)
             print(f"[PLANNER LOG] Plan received: {plan}")
             logger.info(f"Plan created: {plan.task} ({len(plan.steps)} steps)")
 

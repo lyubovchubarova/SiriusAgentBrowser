@@ -82,11 +82,11 @@ class AgentWorker(threading.Thread):
             if item is None:
                 break  # Stop signal
 
-            query, result_queue = item
+            query, chat_history, result_queue = item
             try:
                 logger.info(f"Worker processing query: {query}")
                 if self.orchestrator:
-                    result = self.orchestrator.process_request(query)
+                    result = self.orchestrator.process_request(query, chat_history)
                     result_queue.put({"status": "success", "result": result})
                 else:
                     result_queue.put(
@@ -147,12 +147,14 @@ class AgentWorker(threading.Thread):
             logger.info("Waiting for extension... (Open Side Panel to wake it up)")
             time.sleep(2)
 
-    def process_query(self, query: str) -> dict[str, Any]:
+    def process_query(
+        self, query: str, chat_history: list[dict[str, str]] | None = None
+    ) -> dict[str, Any]:
         if self.init_error:
             raise self.init_error
 
         result_queue: queue.Queue[dict[str, Any]] = queue.Queue()
-        self.request_queue.put((query, result_queue))
+        self.request_queue.put((query, chat_history, result_queue))
         return result_queue.get()
 
     def stop_current_task(self) -> None:
@@ -166,6 +168,7 @@ worker = AgentWorker()
 
 class ChatRequest(BaseModel):
     query: str
+    chat_history: list[dict[str, str]] | None = None
 
 
 # Allow CORS for Chrome Extension
@@ -201,7 +204,9 @@ async def chat_endpoint(request: ChatRequest) -> dict[str, Any]:
     # while waiting for the worker thread queue
     from fastapi.concurrency import run_in_threadpool
 
-    response = await run_in_threadpool(worker.process_query, request.query)
+    response = await run_in_threadpool(
+        worker.process_query, request.query, request.chat_history
+    )
     return cast("dict[str, Any]", response)
 
 

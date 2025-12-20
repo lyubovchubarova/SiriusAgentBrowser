@@ -193,8 +193,21 @@ class Planner:
 
         return ""
 
-    def create_plan(self, task: str) -> Plan:
-        return self._generate_plan_with_retry(task)
+    def create_plan(
+        self, task: str, chat_history: list[dict[str, str]] | None = None
+    ) -> Plan:
+        prompt = f"Task: {task}"
+        if chat_history:
+            # Format chat history for the model
+            history_str = ""
+            for msg in chat_history:
+                role = msg.get("role", "unknown").upper()
+                content = msg.get("content", "")
+                history_str += f"{role}: {content}\n"
+
+            prompt += f"\n\nCONTEXT FROM CHAT HISTORY:\n{history_str}\n\nUse this history to understand the user's intent better (e.g. if they refer to previous results), but focus on executing the current Task."
+
+        return self._generate_plan_with_retry(prompt)
 
     def update_plan(
         self,
