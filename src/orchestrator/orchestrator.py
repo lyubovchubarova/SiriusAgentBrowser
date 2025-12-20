@@ -191,7 +191,9 @@ class Orchestrator:
 
                 # Capture State
                 try:
-                    screenshot_path = "screenshots/current_state.png"
+                    # Optimization: Skip screenshot generation for text-only planning
+                    # We pass "SKIP_SCREENSHOT" to get elements without drawing/saving image
+                    screenshot_path = "SKIP_SCREENSHOT" 
                     dom_data = self.browser_controller.screenshot_with_bboxes(
                         screenshot_path
                     )
@@ -216,13 +218,13 @@ class Orchestrator:
                     # Add Accessibility Tree for better context
                     # Only fetch if DOM is complex or small
                     if len(elements) < 5 or len(elements) > 50:
-                         ax_tree = self.browser_controller.get_accessibility_tree()
-                         # Limit tree size roughly
-                         if len(ax_tree) > 5000:
-                             ax_tree = ax_tree[:5000] + "...(truncated)"
-                         dom_str += f"\n\nAccessibility Tree (Semantic View):\n{ax_tree}"
+                        ax_tree = self.browser_controller.get_accessibility_tree()
+                        # Limit tree size roughly
+                        if len(ax_tree) > 5000:
+                            ax_tree = ax_tree[:5000] + "...(truncated)"
+                        dom_str += f"\n\nAccessibility Tree (Semantic View):\n{ax_tree}"
                     else:
-                         dom_str += "\n\n(Accessibility Tree skipped for performance)"
+                        dom_str += "\n\n(Accessibility Tree skipped for performance)"
 
                     current_url = page.url
 
@@ -346,9 +348,12 @@ class Orchestrator:
                                 "Timeout waiting for full load (vision fallback)."
                             )
 
-                        screenshot_path = "screenshots/planning_context.png"
+                        # Now we actually need the screenshot
+                        real_screenshot_path = "screenshots/planning_context.png"
+                        # We can use the browser controller to get it with bboxes if needed, 
+                        # or just raw screenshot. Planner usually expects raw screenshot for VLM.
                         self.browser_controller.screenshot(
-                            screenshot_path, viewport_only=True
+                            real_screenshot_path, viewport_only=True
                         )
 
                         new_plan = self.planner.update_plan(
@@ -358,7 +363,7 @@ class Orchestrator:
                             current_url=current_url,
                             dom_elements=dom_str,
                             history=full_context_str,
-                            screenshot_path=screenshot_path,
+                            screenshot_path=real_screenshot_path,
                         )
 
                     # 3. Critique Step (Self-Correction)

@@ -450,6 +450,23 @@ class BrowserController:
 
         data = self.page.evaluate(js)
         elements = data["elements"][:max_elements]
+        
+        # Optimization: If we don't strictly need the screenshot file on disk for the Planner (text-only),
+        # we could skip the drawing part. But the Orchestrator currently expects the file to exist.
+        # Let's keep it but optimize:
+        # 1. Don't convert to RGBA if not needed (RGB is faster)
+        # 2. Use a faster drawing method or skip if headless?
+        # For now, let's just return the data if image_path is None (refactoring needed)
+        
+        # If image_path is "SKIP_SCREENSHOT", we just return the elements
+        if image_path == "SKIP_SCREENSHOT":
+             return {
+                "devicePixelRatio": float(data.get("devicePixelRatio", 1.0)),
+                "viewport_only": True,
+                "image": "",
+                "viewport": data.get("viewport"),
+                "elements": elements,
+            }
 
         img_path = Path(image_path)
         img_path.parent.mkdir(parents=True, exist_ok=True)
@@ -458,7 +475,7 @@ class BrowserController:
         self.page.screenshot(path=str(img_path), full_page=False)
 
         dpr = float(data.get("devicePixelRatio", 1.0))
-        im = Image.open(str(img_path)).convert("RGBA")
+        im = Image.open(str(img_path)).convert("RGB") # RGB is faster than RGBA
         draw = ImageDraw.Draw(im)
 
         try:
