@@ -161,7 +161,7 @@ class Planner:
         if self.provider == "yandex":
             # Use standard OpenAI-compatible API for Yandex
             print(f"\n[PLANNER LOG] Sending request to LLM (Streamed)...")
-            
+
             try:
                 response = self.client.chat.completions.create(
                     model=f"gpt://{self.folder}/{self.model_path}",
@@ -173,17 +173,19 @@ class Planner:
                     max_tokens=2000,
                     stream=True,
                 )
-                
+
                 full_response = ""
                 print("[PLANNER STREAM] ", end="", flush=True)
-                
+
                 for chunk in response:
+                    if not chunk.choices:
+                        continue
                     content = chunk.choices[0].delta.content
                     if content:
                         print(content, end="", flush=True)
                         full_response += content
-                
-                print("\n") # Newline after stream
+
+                print("\n")  # Newline after stream
                 return full_response
 
             except Exception as e:
@@ -204,16 +206,18 @@ class Planner:
                 max_tokens=1000,
                 stream=True,
             )
-            
+
             full_response = ""
             print("[PLANNER STREAM] ", end="", flush=True)
-            
+
             for chunk in response:
+                if not chunk.choices:
+                    continue
                 content = chunk.choices[0].delta.content
                 if content:
                     print(content, end="", flush=True)
                     full_response += content
-            
+
             print("\n")
             return full_response
 
