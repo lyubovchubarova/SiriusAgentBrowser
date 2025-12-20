@@ -40,8 +40,11 @@ select = [
 ]
 ignore = [
     "E501",   # line too long (handled by formatter)
-    "RUF002", # ambiguous characters in docstrings (кириллица OK)
-    "RUF003", # ambiguous characters in comments (кириллица OK)
+    "RUF001", # ambiguous characters in strings (Cyrillic OK)
+    "RUF002", # ambiguous characters in docstrings (Cyrillic OK)
+    "RUF003", # ambiguous characters in comments (Cyrillic OK)
+    "SIM105", # use contextlib.suppress (try-except-pass is fine)
+    "W293",   # blank line contains whitespace
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -72,10 +75,28 @@ disallow_untyped_defs = true
 disallow_incomplete_defs = true
 check_untyped_defs = true
 no_implicit_optional = true
+# Разрешаем наследование от Any (нужно для pydantic/openai если их нет в env)
+disallow_subclassing_any = false
+# Разрешаем нетипизированные декораторы (нужно для pydantic/fastapi если их нет в env)
+disallow_untyped_decorators = false
+# Разрешаем избыточные cast (чтобы код работал и с установленными либами, и без них)
+warn_redundant_casts = false
 
 [[tool.mypy.overrides]]
 module = ["tests.*"]
 disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = [
+    "PIL.*",
+    "playwright.*",
+    "fastapi.*",
+    "uvicorn.*",
+    "dotenv.*",
+    "pydantic.*",
+    "openai.*"
+]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
