@@ -159,30 +159,41 @@ class Planner:
             )
 
         if self.provider == "yandex":
-            # YandexGPT specific call
-            # Note: This assumes the OpenAI client is patched or configured for Yandex's specific API structure
-            # which seems to use .responses.create instead of .chat.completions.create
+            # Use standard OpenAI-compatible API for Yandex
+            print(f"\n[PLANNER LOG] Sending request to LLM (Streamed)...")
+            
+            try:
+                response = self.client.chat.completions.create(
+                    model=f"gpt://{self.folder}/{self.model_path}",
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": user_content},
+                    ],
+                    temperature=0.2,
+                    max_tokens=2000,
+                    stream=True,
+                )
+                
+                full_response = ""
+                print("[PLANNER STREAM] ", end="", flush=True)
+                
+                for chunk in response:
+                    content = chunk.choices[0].delta.content
+                    if content:
+                        print(content, end="", flush=True)
+                        full_response += content
+                
+                print("\n") # Newline after stream
+                return full_response
 
-            # Yandex currently supports images via specific API or multimodal models.
-            # Assuming the client handles list content correctly for multimodal models if configured.
-            # If not, we might need to adjust. For now, assuming standard OpenAI-like structure for multimodal.
-
-            # Note: Yandex GPT API structure for images might differ.
-            # If using standard OpenAI client with Yandex base_url, it might expect standard format.
-
-            resp = self.client.responses.create(
-                model=f"gpt://{self.folder}/{self.model_path}",
-                temperature=0.2,
-                input=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": user_content},
-                ],
-                max_output_tokens=1000,
-            )
-            return resp.output_text or ""
+            except Exception as e:
+                print(f"\n[PLANNER ERROR] Streaming failed: {e}")
+                # Fallback or re-raise?
+                raise e
 
         elif self.provider == "openai":
-            # Standard OpenAI API call
+            # Standard OpenAI API call with streaming
+            print(f"\n[PLANNER LOG] Sending request to OpenAI (Streamed)...")
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -191,8 +202,20 @@ class Planner:
                 ],
                 temperature=0.2,
                 max_tokens=1000,
+                stream=True,
             )
-            return response.choices[0].message.content or ""
+            
+            full_response = ""
+            print("[PLANNER STREAM] ", end="", flush=True)
+            
+            for chunk in response:
+                content = chunk.choices[0].delta.content
+                if content:
+                    print(content, end="", flush=True)
+                    full_response += content
+            
+            print("\n")
+            return full_response
 
         return ""
 

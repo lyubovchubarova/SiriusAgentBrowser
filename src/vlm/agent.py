@@ -64,6 +64,8 @@ class VLMAgent:
         for attempt in range(3):
             try:
                 base64_image = self._encode_image(image_path)
+                
+                # Enable streaming
                 response = self.client.chat.completions.create(
                     model=self.model,
                     messages=[
@@ -86,10 +88,22 @@ class VLMAgent:
                     ],
                     temperature=0.1,
                     max_tokens=1000,
+                    stream=True, # Enable streaming
                 )
-                result = response.choices[0].message.content or ""
-                print(f"[VLM LOG] VLM Response: {result}")
-                return result
+                
+                full_result = ""
+                print("[VLM STREAM] ", end="", flush=True)
+                
+                for chunk in response:
+                    content = chunk.choices[0].delta.content
+                    if content:
+                        print(content, end="", flush=True)
+                        full_result += content
+                
+                print("\n") # Newline
+                print(f"[VLM LOG] VLM Response: {full_result}")
+                return full_result
+
             except Exception as e:
                 print(f"VLM call failed (attempt {attempt + 1}/3): {e}")
                 time.sleep(2)
