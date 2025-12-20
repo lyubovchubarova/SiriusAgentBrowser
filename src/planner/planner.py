@@ -271,7 +271,7 @@ class Planner:
                     continue
 
                 try:
-                    return cast(Plan, Plan.model_validate(data))
+                    return cast("Plan", Plan.model_validate(data))
                 except ValidationError as e:
                     last_err = f"Pydantic ValidationError: {e}"
                     continue
