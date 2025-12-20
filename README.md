@@ -13,9 +13,13 @@ src/
 ```
 
 ## Быстрый старт
-
+### Windows
 ```bash
-pip install -e ".[dev]"
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+playwright install
+python src/main.py
 ```
 
 ## Разработка

@@ -39,7 +39,7 @@ def main() -> None:
     )
 
     # Пример запроса
-    user_query = "Найди на хабре статью про BeRT и скопируй ее содержимое"
+    user_query = sys.argv[1]
 
     print(f"User Query: {user_query}")
     print("-" * 50)
