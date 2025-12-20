@@ -214,12 +214,15 @@ class Orchestrator:
                     dom_str = "\n".join(formatted_elements)
 
                     # Add Accessibility Tree for better context
-                    ax_tree = self.browser_controller.get_accessibility_tree()
-                    # Limit tree size roughly
-                    if len(ax_tree) > 8000:
-                        ax_tree = ax_tree[:8000] + "...(truncated)"
-
-                    dom_str += f"\n\nAccessibility Tree (Semantic View):\n{ax_tree}"
+                    # Only fetch if DOM is complex or small
+                    if len(elements) < 5 or len(elements) > 50:
+                         ax_tree = self.browser_controller.get_accessibility_tree()
+                         # Limit tree size roughly
+                         if len(ax_tree) > 5000:
+                             ax_tree = ax_tree[:5000] + "...(truncated)"
+                         dom_str += f"\n\nAccessibility Tree (Semantic View):\n{ax_tree}"
+                    else:
+                         dom_str += "\n\n(Accessibility Tree skipped for performance)"
 
                     current_url = page.url
 

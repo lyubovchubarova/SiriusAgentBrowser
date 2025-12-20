@@ -30,13 +30,9 @@ Hard constraints:
 - expected_result: concrete visible outcome.
 - estimated_time: integer seconds.
 
-TREE OF THOUGHTS (ToT) REASONING:
-Before generating the final plan, you MUST perform a mental simulation of 3 possible strategies in the "reasoning" field.
-Structure your reasoning like this:
-1. Strategy A: [Description] -> Pros/Cons -> Score (1-10)
-2. Strategy B: [Description] -> Pros/Cons -> Score (1-10)
-3. Strategy C: [Description] -> Pros/Cons -> Score (1-10)
-Selected Strategy: [Best Strategy] because [Reason].
+REASONING:
+Provide a concise chain-of-thought reasoning for your plan. Explain why you chose the specific actions and elements.
+If the task is complex, briefly consider alternatives, but prioritize speed and directness.
 
 Strategies for complex pages:
 - If the target is inside a carousel or horizontal list, add a step to click the "Next", "Right Arrow", or ">" button.
@@ -67,7 +63,7 @@ VISION / SCREENSHOTS:
 
 Schema:
 {
-  "reasoning": string, // MANDATORY: Tree of Thoughts analysis (3 strategies + selection).
+  "reasoning": string, // Concise reasoning for the plan.
   "task": string,
   "steps": [
     {
