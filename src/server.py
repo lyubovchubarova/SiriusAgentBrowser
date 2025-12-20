@@ -178,7 +178,7 @@ app.add_middleware(
 )
 
 
-@app.post("/stop")  # type: ignore[untyped-decorator]
+@app.post("/stop")
 async def stop_endpoint() -> dict[str, str]:
     if not worker.is_alive():
         raise HTTPException(status_code=500, detail="Agent worker thread is dead")
@@ -187,7 +187,7 @@ async def stop_endpoint() -> dict[str, str]:
     return {"status": "success", "message": "Stop signal sent"}
 
 
-@app.post("/chat")  # type: ignore[untyped-decorator]
+@app.post("/chat")
 async def chat_endpoint(request: ChatRequest) -> dict[str, Any]:
     if worker.init_error:
         raise HTTPException(

@@ -3,7 +3,7 @@ import os
 import re
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from openai import OpenAI
 from pydantic import ValidationError
@@ -271,7 +271,7 @@ class Planner:
                     continue
 
                 try:
-                    return Plan.model_validate(data)
+                    return cast(Plan, Plan.model_validate(data))
                 except ValidationError as e:
                     last_err = f"Pydantic ValidationError: {e}"
                     continue

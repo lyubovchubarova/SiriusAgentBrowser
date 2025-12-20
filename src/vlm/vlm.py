@@ -101,7 +101,7 @@ class VisionAgent:
             # Check for specific elements (Cloudflare, reCAPTCHA frames)
             if page.locator("iframe[src*='cloudflare']").count() > 0:
                 return True
-            return page.locator("iframe[src*='recaptcha']").count() > 0
+            return bool(page.locator("iframe[src*='recaptcha']").count() > 0)
         except Exception:
             return False
 
