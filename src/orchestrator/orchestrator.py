@@ -5,6 +5,7 @@ from src.browser.browser_controller import BrowserController, BrowserOptions
 from src.browser.debug_wrapper import DebugWrapper
 from src.memory.long_term_memory import LongTermMemory
 from src.planner.planner import Planner
+from src.tools.search import yandex_search
 from src.vlm.vlm import VisionAgent
 
 if TYPE_CHECKING:
@@ -132,9 +133,27 @@ class Orchestrator:
                 logger.info(f"Step {step.step_id}: {step.description}")
 
                 # Execute
-                result = self.vision_agent.execute_step(
-                    step, page, check_stop_callback=lambda: self._stop_requested
-                )
+                if step.action == "search":
+                    logger.info(f"Executing Search API: {step.description}")
+                    try:
+                        search_results = yandex_search(step.description)
+                        if not search_results:
+                            result = "Search returned no results."
+                        else:
+                            # Format top 5 results for the planner
+                            formatted_results = []
+                            for i, res in enumerate(search_results[:5]):
+                                formatted_results.append(
+                                    f"{i+1}. [{res['title']}]({res['url']}) - {res['snippet']}"
+                                )
+                            result = "Search Results:\n" + "\n".join(formatted_results)
+                    except Exception as e:
+                        result = f"Search API failed: {e}"
+                else:
+                    result = self.vision_agent.execute_step(
+                        step, page, check_stop_callback=lambda: self._stop_requested
+                    )
+
                 results.append(f"Step {step.step_id}: {result}")
                 logger.info(f"Step {step.step_id} result: {result}")
 

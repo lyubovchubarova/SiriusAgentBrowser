@@ -18,8 +18,9 @@ Return ONLY valid JSON. No code fences. No commentary.
 Hard constraints:
 - steps length MUST be <= 10. If task is complex, merge steps.
 - step_id must start from 1 and increase by 1 without gaps.
-- action must be exactly one of: navigate, click, type, scroll, extract, hover, inspect, wait, finish.
+- action must be exactly one of: navigate, click, type, scroll, extract, hover, inspect, wait, finish, search.
 - description: short, clear, imperative.
+  - For 'search', provide the search query (e.g., "python documentation").
   - For 'navigate', MUST include the full URL.
   - For 'click' or 'type', YOU MUST USE THE ELEMENT ID if available in the context (e.g., "Click [E12] 'Search'", "Type 'cat' into [E45]").
   - If no ID is visible, use the text description in single quotes.
@@ -45,9 +46,11 @@ Strategies for complex pages:
 
 CRITICAL NAVIGATION RULES:
 - NEVER guess specific URLs (like 'https://www.wildberries.ru/catalog/electronics').
-- ALWAYS start by navigating to a search engine (https://ya.ru) and searching for the query, unless the user provided a specific URL.
-- PREFER Yandex (ya.ru) for all search queries.
-- If you are on a search results page, DO NOT use 'navigate' to go to the target site. Use 'click' to select the relevant result.
+- IF YOU DO NOT HAVE A SPECIFIC URL, USE THE 'search' ACTION.
+- DO NOT navigate to a search engine (like ya.ru) manually. ALWAYS use the 'search' action for queries.
+- The 'search' action will return a list of results (Title, URL, Snippet).
+- In the NEXT step (after 'search'), analyze the results and use 'navigate' to go to the most relevant URL.
+- If you are on a search results page (fallback), DO NOT use 'navigate' to go to the target site. Use 'click' to select the relevant result.
 - If the previous step resulted in a "fallback search", your next step MUST be to 'click' on a result.
 
 QUALITY CONTROL & COMPLETION:

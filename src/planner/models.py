@@ -12,6 +12,7 @@ Action = Literal[
     "inspect",
     "wait",
     "finish",
+    "search",
 ]
 
 
