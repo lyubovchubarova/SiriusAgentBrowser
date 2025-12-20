@@ -156,8 +156,8 @@ class Planner:
 
         if self.provider == "yandex":
             # Use standard OpenAI-compatible API for Yandex
-            print(f"\n[PLANNER LOG] Sending request to LLM (Streamed)...")
-
+print(f"\n[PLANNER LOG] Sending request to LLM (Streamed) with Reasoning...")
+            
             try:
                 response = self.client.chat.completions.create(
                     model=f"gpt://{self.folder}/{self.model_path}",
@@ -168,6 +168,7 @@ class Planner:
                     temperature=0.2,
                     max_tokens=2000,
                     stream=True,
+                    extra_body={"reasoningOptions": {"mode": "ENABLED_HIDDEN"}},
                 )
 
                 full_response = ""

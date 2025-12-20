@@ -193,7 +193,7 @@ class Orchestrator:
                 try:
                     # Optimization: Skip screenshot generation for text-only planning
                     # We pass "SKIP_SCREENSHOT" to get elements without drawing/saving image
-                    screenshot_path = "SKIP_SCREENSHOT" 
+                    screenshot_path = "SKIP_SCREENSHOT"
                     dom_data = self.browser_controller.screenshot_with_bboxes(
                         screenshot_path
                     )
@@ -350,7 +350,7 @@ class Orchestrator:
 
                         # Now we actually need the screenshot
                         real_screenshot_path = "screenshots/planning_context.png"
-                        # We can use the browser controller to get it with bboxes if needed, 
+                        # We can use the browser controller to get it with bboxes if needed,
                         # or just raw screenshot. Planner usually expects raw screenshot for VLM.
                         self.browser_controller.screenshot(
                             real_screenshot_path, viewport_only=True
