@@ -6,7 +6,7 @@ import threading
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -178,7 +178,7 @@ app.add_middleware(
 )
 
 
-@app.post("/stop")  # type: ignore[untyped-decorator]
+@app.post("/stop")
 async def stop_endpoint() -> dict[str, str]:
     if not worker.is_alive():
         raise HTTPException(status_code=500, detail="Agent worker thread is dead")
@@ -187,7 +187,7 @@ async def stop_endpoint() -> dict[str, str]:
     return {"status": "success", "message": "Stop signal sent"}
 
 
-@app.post("/chat")  # type: ignore[untyped-decorator]
+@app.post("/chat")
 async def chat_endpoint(request: ChatRequest) -> dict[str, Any]:
     if worker.init_error:
         raise HTTPException(
@@ -202,7 +202,7 @@ async def chat_endpoint(request: ChatRequest) -> dict[str, Any]:
     from fastapi.concurrency import run_in_threadpool
 
     response = await run_in_threadpool(worker.process_query, request.query)
-    return cast("dict[str, Any]", response)
+    return response
 
 
 if __name__ == "__main__":
