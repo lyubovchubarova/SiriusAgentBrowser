@@ -123,7 +123,7 @@ class AgentWorker(threading.Thread):
                 if i == max_retries - 1:
                     raise e
                 logger.warning(
-                    f"Connection attempt {i+1} failed: {e}. Retrying in 2s..."
+                    f"Connection attempt {i + 1} failed: {e}. Retrying in 2s..."
                 )
                 time.sleep(2)
 
