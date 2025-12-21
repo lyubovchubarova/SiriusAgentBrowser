@@ -9,13 +9,23 @@ description = "Браузерный агент с VLM"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
-dependencies = []
+dependencies = [
+    "playwright==1.52.0",
+    "openai==1.108.1",
+    "pydantic==2.9.2",
+    "python-dotenv==1.1.1",
+    "requests==2.32.3",
+    "pillow==10.4.0",
+    "fastapi==0.116.1",
+    "uvicorn==0.35.0",
+]
 
 [project.optional-dependencies]
 dev = [
     "ruff>=0.8.0",
     "mypy>=1.13.0",
     "pytest>=8.0.0",
+    "types-requests>=2.31.0",
 ]
 
 [tool.ruff]
