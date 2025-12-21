@@ -170,11 +170,14 @@ Return ONLY one word: "agent" or "chat".
 
         try:
             if stream_callback:
-                stream = cast("Any", self.client.chat.completions.create(
-                    model=self.model,
-                    messages=cast("Any", messages),
-                    stream=True,
-                ))
+                stream = cast(
+                    "Any",
+                    self.client.chat.completions.create(
+                        model=self.model,
+                        messages=cast("Any", messages),
+                        stream=True,
+                    ),
+                )
                 full_response = ""
                 for chunk in stream:
                     if chunk.choices[0].delta.content:

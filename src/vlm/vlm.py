@@ -175,14 +175,11 @@ class VisionAgent:
         for frame in page.frames:
             # reCAPTCHA challenge frame often has 'bframe' in name or specific URL
             if (
-                (
-                    "recaptcha/api2/bframe" in frame.url
-                    or "hcaptcha.com/iframe" in frame.url
-                )
-                and (
-                    frame.locator("table").count() > 0
-                    or frame.locator(".rc-imageselect-table-33").count() > 0
-                )
+                "recaptcha/api2/bframe" in frame.url
+                or "hcaptcha.com/iframe" in frame.url
+            ) and (
+                frame.locator("table").count() > 0
+                or frame.locator(".rc-imageselect-table-33").count() > 0
             ):
                 challenge_frame = frame
                 print(f"Found CAPTCHA challenge frame: {frame.url}")

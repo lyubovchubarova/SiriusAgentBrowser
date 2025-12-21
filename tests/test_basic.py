@@ -6,4 +6,3 @@ def test_sanity():
 def test_math():
     """Simple math test."""
     assert 2 + 2 == 4
-
