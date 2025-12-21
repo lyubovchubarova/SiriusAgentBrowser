@@ -70,23 +70,34 @@ class LongTermMemory:
         """
         Returns a string representation of relevant past experiences.
         """
+        # 1. Check for exact domain match
         domain = self.get_domain(url)
         relevant_entries = [e for e in self.data if e["domain"] == domain]
 
-        if not relevant_entries:
-            return ""
+        # 2. Check for global task similarity (even if domain is different, maybe we know the URL)
+        # For example, if task is "open youtube", we might have a memory with domain "youtube.com"
 
-        # Find most similar task
         best_match = None
         best_ratio = 0.0
 
+        # Search in domain-specific entries first
         for entry in relevant_entries:
             ratio = difflib.SequenceMatcher(
                 None, current_task.lower(), entry["task"].lower()
             ).ratio()
-            if ratio > 0.5 and ratio > best_ratio:  # Threshold
+            if ratio > 0.5 and ratio > best_ratio:
                 best_ratio = ratio
                 best_match = entry
+
+        # If no domain match, search globally (e.g. to find the URL for a task)
+        if not best_match:
+            for entry in self.data:
+                ratio = difflib.SequenceMatcher(
+                    None, current_task.lower(), entry["task"].lower()
+                ).ratio()
+                if ratio > 0.6 and ratio > best_ratio:
+                    best_ratio = ratio
+                    best_match = entry
 
         if best_match:
             steps_summary = "\n".join(
@@ -95,6 +106,6 @@ class LongTermMemory:
                     for s in best_match["steps"]
                 ]
             )
-            return f"MEMORY RECALL: You have successfully completed a similar task '{best_match['task']}' on this domain before.\nSuccessful steps were:\n{steps_summary}\nUse this as a guide."
+            return f"MEMORY RECALL: You have successfully completed a similar task '{best_match['task']}' (Domain: {best_match['domain']}).\nSuccessful steps were:\n{steps_summary}\nUse this as a guide. If the task implies navigating to this domain, you can start by navigating to 'https://{best_match['domain']}'."
 
         return ""

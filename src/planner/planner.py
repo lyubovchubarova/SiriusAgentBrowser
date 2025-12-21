@@ -14,24 +14,26 @@ SYSTEM_PROMPT = """
 You are a planner for browser automation.
 
 Return ONLY valid JSON. No code fences. No commentary.
+Format the JSON with indentation (2 or 4 spaces) for readability.
 
 Hard constraints:
 - steps length MUST be <= 10. If task is complex, merge steps.
 - step_id must start from 1 and increase by 1 without gaps.
-- action must be exactly one of: navigate, click, type, scroll, extract, hover, inspect, wait, finish, search.
+- action must be exactly one of: navigate, click, type, scroll, extract, hover, inspect, wait, finish, search, solve_captcha.
 - description: short, clear, imperative.
-  - For 'search', provide the search query (e.g., "python documentation").
+  - For 'search', provide ONLY the optimal search keywords (e.g., "python documentation"). Do NOT include system words like "search for", "find", "look up".
   - For 'navigate', MUST include the full URL.
   - For 'click' or 'type', YOU MUST USE THE ELEMENT ID if available in the context (e.g., "Click [E12] 'Search'", "Type 'cat' into [E45]").
   - If no ID is visible, use the text description in single quotes.
   - For 'inspect', describe what element or section you want to analyze (e.g., "Inspect the main article content").
   - For 'wait', describe what you are waiting for (e.g., "Wait for the results to load").
+  - For 'solve_captcha', describe what kind of captcha you see (e.g., "Solve the Cloudflare challenge").
   - For 'finish', describe why the task is complete. If the task was just to find/open a page, use this action as soon as the page is loaded.
 - expected_result: concrete visible outcome.
 - estimated_time: integer seconds.
 
 REASONING:
-Provide a concise chain-of-thought reasoning for your plan. Explain why you chose the specific actions and elements.
+Provide a concise chain-of-thought reasoning for your plan IN RUSSIAN. Explain why you chose the specific actions and elements.
 If the task is complex, briefly consider alternatives, but prioritize speed and directness.
 
 Strategies for complex pages:
@@ -39,21 +41,21 @@ Strategies for complex pages:
 - If the page seems stuck or empty, try to "scroll" to trigger lazy loading.
 - If a popup/modal blocks the view, add a step to click "Close", "X", or "Not now".
 - If a menu is hidden, try to "hover" over the parent element to reveal it.
+- If you see a CAPTCHA or "I am not a robot" checkbox, use the 'solve_captcha' action.
 
 CRITICAL NAVIGATION RULES:
-- NEVER guess specific URLs (like 'https://www.wildberries.ru/catalog/electronics').
-- IF YOU DO NOT HAVE A SPECIFIC URL, USE THE 'search' ACTION.
-- DO NOT navigate to a search engine (like ya.ru) manually. ALWAYS use the 'search' action for queries.
-- The 'search' action will return a list of results (Title, URL, Snippet).
-- In the NEXT step (after 'search'), analyze the results and use 'navigate' to go to the most relevant URL.
-- If you are on a search results page (fallback), DO NOT use 'navigate' to go to the target site. Use 'click' to select the relevant result.
-- If the previous step resulted in a "fallback search", your next step MUST be to 'click' on a result.
+- DIRECT NAVIGATION: If you know the URL (e.g., 'https://youtube.com', 'https://github.com'), use 'navigate' directly. Do not search for it.
+- SEARCHING: If you need to find something, use the 'search' action. This will type the query into the browser's address bar/search engine.
+- DO NOT navigate to a search engine (like ya.ru) manually to type a query. Just use the 'search' action.
+- AFTER SEARCHING: You will be on a search results page. Use 'click' to select the relevant result.
+- ADDRESS BAR: The 'search' action is equivalent to typing in the address bar.
 
 QUALITY CONTROL & COMPLETION:
 - When selecting a search result, CHECK THE HREF/URL in the context if available. Ensure it matches the target domain (e.g., 'genius.com' for lyrics, not 'yandex.ru/ads').
 - Avoid clicking 'Sponsored', 'Ad', or 'Реклама' links unless explicitly asked.
 - In your reasoning, explicitly state WHY you chose a specific ID (e.g., "I chose [E15] because it links to genius.com and has the correct title").
 - CHECK IF THE TASK IS ALREADY COMPLETED. If the current page content matches the user's request (e.g., the article is open), use the 'finish' action immediately. DO NOT continue clicking or opening more pages.
+- NEW SESSION RULE: If you are starting a new task and the current URL is unknown or 'about:blank', you MUST generate at least one 'navigate' or 'search' step. Do NOT assume the page is already open.
 - SINGLE TAB POLICY: PREFER working in the current tab. Only open a new tab if the user EXPLICITLY requested it (e.g., "open in a new tab"). If the user did not ask for a new tab, assume all links should open in the current tab.
 
 VISION / SCREENSHOTS:
@@ -126,13 +128,82 @@ class Planner:
         else:
             raise ValueError(f"Unknown provider: {provider}")
 
+    def classify_intent(self, user_prompt: str) -> str:
+        """
+        Determines if the user prompt requires browser automation ('agent')
+        or can be answered directly by the LLM ('chat').
+        """
+        prompt = f"""
+You are a classifier. Determine if the user's request requires using a web browser to perform actions (searching, navigating, clicking) OR if it can be answered directly by a language model (general knowledge, recipes, explanations).
+
+User Request: "{user_prompt}"
+
+Return ONLY one word: "agent" or "chat".
+""".strip()
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=cast("Any", [{"role": "user", "content": prompt}]),
+                temperature=0.0,
+            )
+            content = response.choices[0].message.content
+            result = content.strip().lower() if content else "agent"
+            return "agent" if "agent" in result else "chat"
+        except Exception as e:
+            print(f"Classification error: {e}")
+            return "agent"  # Default to agent if unsure
+
+    def generate_direct_answer(
+        self, user_prompt: str, stream_callback: Any = None
+    ) -> str:
+        """
+        Generates a direct answer for the user without using the browser.
+        """
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a helpful AI assistant. Answer the user's question directly and concisely.",
+            },
+            {"role": "user", "content": user_prompt},
+        ]
+
+        try:
+            if stream_callback:
+                stream = cast("Any", self.client.chat.completions.create(
+                    model=self.model,
+                    messages=cast("Any", messages),
+                    stream=True,
+                ))
+                full_response = ""
+                for chunk in stream:
+                    if chunk.choices[0].delta.content:
+                        content = chunk.choices[0].delta.content
+                        full_response += content
+                        stream_callback(content)
+                return full_response
+            else:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=cast("Any", messages),
+                )
+                return response.choices[0].message.content or ""
+        except Exception as e:
+            return f"Error generating answer: {e}"
+
     def _ask_llm(
         self,
         task: str,
         extra_user_text: str | None = None,
         image_path: str | None = None,
+        system_prompt: str | None = None,
+        use_reasoning: bool = False,
+        stream_callback: Any = None,
     ) -> str:
         user_content: Any
+
+        # Default to global SYSTEM_PROMPT if not provided
+        sys_prompt = system_prompt if system_prompt is not None else SYSTEM_PROMPT
 
         if image_path:
             import base64
@@ -156,20 +227,25 @@ class Planner:
 
         if self.provider == "yandex":
             # Use standard OpenAI-compatible API for Yandex
-            print(f"\n[PLANNER LOG] Sending request to LLM (Streamed) with Reasoning...")
-            
+            print("\n[PLANNER LOG] Sending request to LLM (Streamed)...")
+
+            kwargs = {
+                "model": f"gpt://{self.folder}/{self.model_path}",
+                "messages": [
+                    {"role": "system", "content": sys_prompt},
+                    {"role": "user", "content": user_content},
+                ],
+                "temperature": 0.2,
+                "max_tokens": 2000,
+                "stream": True,
+            }
+
+            if use_reasoning:
+                kwargs["extra_body"] = {"reasoningOptions": {"mode": "ENABLED_HIDDEN"}}
+                print("[PLANNER LOG] Reasoning enabled.")
+
             try:
-                response = self.client.chat.completions.create(
-                    model=f"gpt://{self.folder}/{self.model_path}",
-                    messages=[
-                        {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user", "content": user_content},
-                    ],
-                    temperature=0.2,
-                    max_tokens=2000,
-                    stream=True,
-                    extra_body={"reasoningOptions": {"mode": "ENABLED_HIDDEN"}},
-                )
+                response = self.client.chat.completions.create(**cast("Any", kwargs))
 
                 full_response = ""
                 print("[PLANNER STREAM] ", end="", flush=True)
@@ -181,6 +257,8 @@ class Planner:
                     if content:
                         print(content, end="", flush=True)
                         full_response += content
+                        if stream_callback:
+                            stream_callback(content)
 
                 print("\n")  # Newline after stream
                 return full_response
@@ -192,11 +270,11 @@ class Planner:
 
         elif self.provider == "openai":
             # Standard OpenAI API call with streaming
-            print(f"\n[PLANNER LOG] Sending request to OpenAI (Streamed)...")
+            print("\n[PLANNER LOG] Sending request to OpenAI (Streamed)...")
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "system", "content": sys_prompt},
                     {"role": "user", "content": user_content},
                 ],
                 temperature=0.2,
@@ -214,6 +292,8 @@ class Planner:
                 if content:
                     print(content, end="", flush=True)
                     full_response += content
+                    if stream_callback:
+                        stream_callback(content)
 
             print("\n")
             return full_response
@@ -221,9 +301,12 @@ class Planner:
         return ""
 
     def create_plan(
-        self, task: str, chat_history: list[dict[str, str]] | None = None
+        self,
+        task: str,
+        chat_history: list[dict[str, str]] | None = None,
+        status_callback: Any = None,
     ) -> Plan:
-        prompt = f"Task: {task}"
+        prompt = f"Task: {task}\n\nCurrent State: New Browser Session (Empty Tab). You need to navigate to the target site."
         if chat_history:
             # Format chat history for the model
             history_str = ""
@@ -234,7 +317,7 @@ class Planner:
 
             prompt += f"\n\nCONTEXT FROM CHAT HISTORY:\n{history_str}\n\nUse this history to understand the user's intent better (e.g. if they refer to previous results), but focus on executing the current Task."
 
-        return self._generate_plan_with_retry(prompt)
+        return self._generate_plan_with_retry(prompt, stream_callback=status_callback)
 
     def update_plan(
         self,
@@ -245,6 +328,7 @@ class Planner:
         dom_elements: str,
         history: str = "",
         screenshot_path: str | None = None,
+        status_callback: Any = None,
     ) -> Plan:
         """
         Generates a new plan (remaining steps) based on the current state.
@@ -272,10 +356,15 @@ class Planner:
         if screenshot_path:
             context += "\nA screenshot of the current page is attached. Use it to resolve ambiguity if the DOM is insufficient.\n"
 
-        return self._generate_plan_with_retry(context, image_path=screenshot_path)
+        return self._generate_plan_with_retry(
+            context, image_path=screenshot_path, stream_callback=status_callback
+        )
 
     def _generate_plan_with_retry(
-        self, user_prompt: str, image_path: str | None = None
+        self,
+        user_prompt: str,
+        image_path: str | None = None,
+        stream_callback: Any = None,
     ) -> Plan:
         last_raw = ""
         last_err = ""
@@ -294,7 +383,11 @@ class Planner:
 
             try:
                 raw_text = self._ask_llm(
-                    user_prompt, extra_user_text=extra, image_path=image_path
+                    user_prompt,
+                    extra_user_text=extra,
+                    image_path=image_path,
+                    use_reasoning=True,  # Enable reasoning for planning
+                    stream_callback=stream_callback,
                 )
                 last_raw = raw_text
             except Exception as e:
@@ -349,7 +442,11 @@ class Planner:
         """
 
         try:
-            response = self._ask_llm(prompt)
+            response = self._ask_llm(
+                task=prompt,
+                system_prompt="You are a critical reviewer.",
+                use_reasoning=True,  # Reasoning helps critique
+            )
             if "INVALID" in response:
                 return False, response
             return True, "Plan looks good."
@@ -383,26 +480,11 @@ class Planner:
         """
 
         try:
-            if self.provider == "yandex":
-                resp = self.client.responses.create(
-                    model=f"gpt://{self.folder}/{self.model_path}",
-                    temperature=0.7,
-                    input=[
-                        {"role": "system", "content": "You are a helpful assistant."},
-                        {"role": "user", "content": prompt},
-                    ],
-                    max_output_tokens=1000,
-                )
-                return resp.output_text or ""
-            else:
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {"role": "system", "content": "You are a helpful assistant."},
-                        {"role": "user", "content": prompt},
-                    ],
-                    temperature=0.7,
-                )
-                return response.choices[0].message.content or ""
+            # Use _ask_llm but with a custom system prompt for summary
+            return self._ask_llm(
+                task=prompt,
+                system_prompt="You are a helpful assistant.",
+                use_reasoning=False,  # No reasoning needed for summary
+            )
         except Exception as e:
             return f"Task completed, but failed to generate summary: {e}"

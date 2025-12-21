@@ -27,7 +27,7 @@ try {
 
 # Wait for Chrome to actually start
 Write-Host "Waiting for Chrome to initialize..."
-Start-Sleep -Seconds 3
+Start-Sleep -Seconds 1
 
 # 2. Start Server
 Write-Host "`n=== Step 2: Starting Agent Server ===" -ForegroundColor Cyan

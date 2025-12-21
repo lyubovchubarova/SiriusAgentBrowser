@@ -49,6 +49,88 @@
 				box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 			}
 
+			.thinking-container {
+				align-self: flex-start;
+				background-color: #e8e8e8;
+				border-radius: 8px;
+				margin-bottom: 8px;
+				max-width: 95%;
+				border: 1px solid #d0d0d0;
+				overflow: hidden;
+				display: flex;
+				flex-direction: column;
+				box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+				animation: fadeIn 0.3s ease-out;
+			}
+
+			@keyframes fadeIn {
+				from {
+					opacity: 0;
+					transform: translateY(5px);
+				}
+				to {
+					opacity: 1;
+					transform: translateY(0);
+				}
+			}
+
+			.thinking-header {
+				padding: 6px 10px;
+				background-color: #dcdcdc;
+				cursor: pointer;
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				font-size: 11px;
+				font-weight: 600;
+				color: #555;
+				user-select: none;
+				transition: background-color 0.2s;
+			}
+
+			.thinking-header:hover {
+				background-color: #d0d0d0;
+			}
+
+			.thinking-content {
+				padding: 10px;
+				font-family: "Consolas", "Monaco", "Courier New", monospace;
+				font-size: 11px;
+				line-height: 1.4;
+				white-space: pre-wrap;
+				word-wrap: break-word;
+				color: #333;
+				background-color: #e8e8e8;
+				display: block;
+				max-height: 300px;
+				overflow-y: auto;
+			}
+
+			.thinking-content.collapsed {
+				display: none;
+			}
+
+			.thinking-content::after {
+				content: "▋";
+				display: inline-block;
+				vertical-align: bottom;
+				animation: blink 1s step-start infinite;
+				color: #888;
+				margin-left: 2px;
+				font-size: 10px;
+			}
+
+			@keyframes blink {
+				50% {
+					opacity: 0;
+				}
+			}
+
+			.toggle-icon {
+				transition: transform 0.2s;
+				font-size: 10px;
+			}
+
 			.status-message {
 				align-self: center;
 				font-size: 12px;

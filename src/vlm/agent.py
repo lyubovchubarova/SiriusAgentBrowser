@@ -3,6 +3,7 @@ import os
 import re
 import time
 from pathlib import Path
+from typing import Any
 
 import openai
 
@@ -53,7 +54,13 @@ class VLMAgent:
         with Path(image_path).open("rb") as image_file:
             return base64.b64encode(image_file.read()).decode("utf-8")
 
-    def _call_vlm(self, image_path: str, system_prompt: str, user_prompt: str) -> str:
+    def _call_vlm(
+        self,
+        image_path: str,
+        system_prompt: str,
+        user_prompt: str,
+        stream_callback: Any = None,
+    ) -> str:
         if not self.client:
             return "Error: VLM client not initialized"
 
@@ -101,6 +108,8 @@ class VLMAgent:
                     if content:
                         print(content, end="", flush=True)
                         full_result += content
+                        if stream_callback:
+                            stream_callback(content)
 
                 print("\n")  # Newline
                 print(f"[VLM LOG] VLM Response: {full_result}")
@@ -112,12 +121,17 @@ class VLMAgent:
 
         return "Error calling VLM: Max retries exceeded"
 
-    def get_target_id(self, image_path: str, task_description: str) -> str:
+    def get_target_id(
+        self, image_path: str, task_description: str, stream_callback: Any = None
+    ) -> str:
         """
         Returns target ID in format :id:<number>: or :not_found:
         """
         response = self._call_vlm(
-            image_path, self.click_system_prompt, task_description
+            image_path,
+            self.click_system_prompt,
+            task_description,
+            stream_callback=stream_callback,
         )
 
         # Basic validation
@@ -132,7 +146,9 @@ class VLMAgent:
 
         return response
 
-    def extract_data(self, image_path: str, query: str) -> str:
+    def extract_data(
+        self, image_path: str, query: str, stream_callback: Any = None
+    ) -> str:
         """
         Extracts structured data from the image based on the query.
         """
@@ -141,14 +157,21 @@ class VLMAgent:
             "Отвечай только фактами, которые видишь на изображении.\n"
             "Если данных нет, напиши 'Данные не найдены'."
         )
-        return self._call_vlm(image_path, system_prompt, query)
+        return self._call_vlm(
+            image_path, system_prompt, query, stream_callback=stream_callback
+        )
 
-    def verify_state(self, image_path: str, expected_result: str) -> tuple[bool, str]:
+    def verify_state(
+        self, image_path: str, expected_result: str, stream_callback: Any = None
+    ) -> tuple[bool, str]:
         """
         Verifies if the screenshot matches the expected result.
         """
         response = self._call_vlm(
-            image_path, VERIFY_SYSTEM_PROMPT, f"Ожидаемый результат: {expected_result}"
+            image_path,
+            VERIFY_SYSTEM_PROMPT,
+            f"Ожидаемый результат: {expected_result}",
+            stream_callback=stream_callback,
         )
 
         if "TRUE" in response.upper():

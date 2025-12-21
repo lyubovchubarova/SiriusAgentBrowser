@@ -550,6 +550,69 @@ class BrowserController:
 
         return meta
 
+    def handle_popups(self) -> bool:
+        """
+        Пытается закрыть всплывающие окна (cookie banners, promo popups) через JS.
+        Возвращает True, если что-то было закрыто.
+        """
+        js = r"""
+        () => {
+            const closeSelectors = [
+                'button[aria-label="Close"]',
+                'button[aria-label="close"]',
+                'button[aria-label="Закрыть"]',
+                'svg[aria-label="Close"]',
+                'div[role="button"][aria-label="Close"]',
+                '.close-modal',
+                '.modal-close',
+                '.popup-close',
+                '.b-popup-close',
+                '[class*="popup"] [class*="close"]',
+                '[class*="modal"] [class*="close"]'
+            ];
+            
+            const cookieSelectors = [
+                '#onetrust-accept-btn-handler',
+                '#accept-cookie-notification',
+                'button[id*="cookie"][id*="accept"]',
+                'button[class*="cookie"][class*="accept"]',
+                'button[data-testid="cookie-policy-dialog-accept-button"]',
+                '.js-cookie-consent-accept',
+                '.cookie-banner__accept',
+                '#cookie-accept'
+            ];
+
+            let actionTaken = false;
+            
+            const clickAll = (selectors) => {
+                for (const sel of selectors) {
+                    try {
+                        const els = document.querySelectorAll(sel);
+                        for (const el of els) {
+                            const style = window.getComputedStyle(el);
+                            if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') continue;
+                            const r = el.getBoundingClientRect();
+                            if (r.width === 0 || r.height === 0) continue;
+                            
+                            // Ensure it's clickable
+                            el.click();
+                            actionTaken = true;
+                        }
+                    } catch(e) {}
+                }
+            };
+
+            clickAll(closeSelectors);
+            clickAll(cookieSelectors);
+            
+            return actionTaken;
+        }
+        """
+        try:
+            return bool(self.page.evaluate(js))
+        except Exception:
+            return False
+
     def close(self) -> None:
         if self._context:
             self._context.close()

@@ -13,6 +13,7 @@ Action = Literal[
     "wait",
     "finish",
     "search",
+    "solve_captcha",
 ]
 
 

@@ -4,6 +4,7 @@ import queue
 import sys
 import threading
 import time
+from collections.abc import Generator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, cast
@@ -11,6 +12,7 @@ from typing import Any, cast
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 # Add project root to path
@@ -56,6 +58,10 @@ app.add_middleware(
 # must run in a single thread and cannot be mixed with asyncio loops easily.
 
 
+# Global log queue for streaming
+log_queue: queue.Queue[str] = queue.Queue()
+
+
 class AgentWorker(threading.Thread):
     def __init__(self) -> None:
         super().__init__(daemon=True)
@@ -86,7 +92,25 @@ class AgentWorker(threading.Thread):
             try:
                 logger.info(f"Worker processing query: {query}")
                 if self.orchestrator:
-                    result = self.orchestrator.process_request(query, chat_history)
+                    # Callbacks for streaming
+                    def on_status(msg: str) -> None:
+                        import json
+
+                        # Send to global log queue for /stream endpoint
+                        log_queue.put(json.dumps({"type": "status", "content": msg}))
+
+                    def on_token(token: str) -> None:
+                        import json
+
+                        # Send to global log queue for /stream endpoint
+                        log_queue.put(json.dumps({"type": "token", "content": token}))
+
+                    result = self.orchestrator.process_request(
+                        query,
+                        chat_history,
+                        status_callback=on_status,
+                        stream_callback=on_token,
+                    )
                     result_queue.put({"status": "success", "result": result})
                 else:
                     result_queue.put(
@@ -123,9 +147,9 @@ class AgentWorker(threading.Thread):
                 if i == max_retries - 1:
                     raise e
                 logger.warning(
-                    f"Connection attempt {i + 1} failed: {e}. Retrying in 2s..."
+                    f"Connection attempt {i + 1} failed: {e}. Retrying in 1s..."
                 )
-                time.sleep(2)
+                time.sleep(1)
 
         # Extension polling
         logger.info("Waiting for 'Sirius Agent Browser' extension...")
@@ -144,8 +168,8 @@ class AgentWorker(threading.Thread):
                 logger.info("Initialization interrupted by user stop request.")
                 break
 
-            logger.info("Waiting for extension... (Open Side Panel to wake it up)")
-            time.sleep(2)
+            # logger.info("Waiting for extension... (Open Side Panel to wake it up)")
+            time.sleep(0.5)
 
     def process_query(
         self, query: str, chat_history: list[dict[str, str]] | None = None
@@ -181,6 +205,15 @@ app.add_middleware(
 )
 
 
+@app.get("/health")
+async def health_check() -> dict[str, Any]:
+    return {
+        "status": "ok",
+        "worker_alive": worker.is_alive(),
+        "worker_ready": worker.ready_event.is_set(),
+    }
+
+
 @app.post("/stop")
 async def stop_endpoint() -> dict[str, str]:
     if not worker.is_alive():
@@ -188,6 +221,24 @@ async def stop_endpoint() -> dict[str, str]:
 
     worker.stop_current_task()
     return {"status": "success", "message": "Stop signal sent"}
+
+
+@app.get("/stream")
+async def stream_endpoint() -> StreamingResponse:
+    def event_generator() -> Generator[str, None, None]:
+        while True:
+            try:
+                # Wait for message with timeout to allow checking for disconnects
+                # Using a short timeout to yield keepalives
+                msg = log_queue.get(timeout=1)
+                yield f"data: {msg}\n\n"
+            except queue.Empty:
+                yield ": keepalive\n\n"
+            except Exception as e:
+                logger.error(f"Stream error: {e}")
+                break
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @app.post("/chat")

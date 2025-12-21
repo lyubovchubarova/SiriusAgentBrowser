@@ -5,7 +5,6 @@ from src.browser.browser_controller import BrowserController, BrowserOptions
 from src.browser.debug_wrapper import DebugWrapper
 from src.memory.long_term_memory import LongTermMemory
 from src.planner.planner import Planner
-from src.tools.search import yandex_search
 from src.vlm.vlm import VisionAgent
 
 if TYPE_CHECKING:
@@ -51,7 +50,11 @@ class Orchestrator:
             logger.info("Browser closed.")
 
     def process_request(
-        self, user_request: str, chat_history: list[dict[str, str]] | None = None
+        self,
+        user_request: str,
+        chat_history: list[dict[str, str]] | None = None,
+        status_callback: Any = None,
+        stream_callback: Any = None,
     ) -> str:
         """
         Обрабатывает пользовательский запрос.
@@ -64,23 +67,70 @@ class Orchestrator:
         logger.info(f"Processing request: {user_request}")
         self._stop_requested = False
 
+        def report_status(msg: str) -> None:
+            if status_callback:
+                status_callback(msg)
+            print(f"[STATUS] {msg}")
+
         try:
+            # 0. Intent Classification
+            report_status("Analyzing request...")
+            intent = self.planner.classify_intent(user_request)
+            logger.info(f"Intent classified as: {intent}")
+
+            if intent == "chat":
+                report_status("Generating answer...")
+                # For chat, we stream the answer directly to the stream_callback (which goes to the thinking block)
+                # OR we just return it.
+                # The user wants "YandexGPT should answer itself".
+                # If we use stream_callback, it appears in the "Thinking" block.
+                # If we return it, it appears in the "Agent" block.
+                # Let's do both: stream it for "liveness" (optional) and return it.
+                # Actually, for a direct chat, the "Thinking" block might be confusing if it contains the answer.
+                # But the user asked for "reasoning" to be collapsible.
+                # Let's just generate the answer and return it.
+
+                answer = self.planner.generate_direct_answer(
+                    user_request, stream_callback=None
+                )
+                return answer
+
             # 1. Планирование
             logger.info("Creating plan...")
+            report_status("Thinking... (Generating Plan)")
             print(f"\n[PLANNER LOG] Requesting plan for: {user_request}")
 
             # Retrieve memory context
             memory_context = ""
-            # We don't have a URL yet, so we can't fetch domain-specific memory easily
-            # But we can try if the user request contains a URL
-            # For now, let's skip initial memory or try to guess domain from request?
-            # Better: Pass empty memory first, and update plan with memory later when we have a URL.
 
-            plan: Plan = self.planner.create_plan(user_request, chat_history)
+            # Force initial state context
+            initial_state_context = "Current State: New Browser Session (Empty Tab). You need to navigate to the target site."
+
+            plan: Plan = self.planner.create_plan(
+                user_request, chat_history, status_callback=stream_callback
+            )
+
+            # Check if initial plan is empty or just "finish"
+            if not plan.steps or (
+                len(plan.steps) == 1 and plan.steps[0].action in ["finish", "extract"]
+            ):
+                logger.warning(
+                    "Initial plan was empty or premature finish. Retrying with explicit instruction."
+                )
+                # Retry with stronger prompt
+                plan = self.planner.create_plan(
+                    user_request
+                    + f"\n\n{initial_state_context}\nCRITICAL: You MUST generate navigation steps.",
+                    chat_history,
+                    status_callback=stream_callback,
+                )
+
             print(f"[PLANNER LOG] Plan received: {plan}")
             logger.info(f"Plan created: {plan.task} ({len(plan.steps)} steps)")
+            report_status(f"Plan created: {len(plan.steps)} steps")
 
             # 2. Запуск браузера
+            report_status("Starting browser...")
             self.start_browser()
             page: Any = self.browser_controller.page
 
@@ -134,24 +184,69 @@ class Orchestrator:
 
                 # Execute
                 if step.action == "search":
-                    logger.info(f"Executing Search API: {step.description}")
+                    logger.info(f"Executing Search: {step.description}")
+                    # User prefers using the address bar for searching instead of API
+                    # This mimics a user typing in the address bar
                     try:
-                        search_results = yandex_search(step.description)
-                        if not search_results:
-                            result = "Search returned no results."
-                        else:
-                            # Format top 5 results for the planner
-                            formatted_results = []
-                            for i, res in enumerate(search_results[:5]):
-                                formatted_results.append(
-                                    f"{i+1}. [{res['title']}]({res['url']}) - {res['snippet']}"
-                                )
-                            result = "Search Results:\n" + "\n".join(formatted_results)
+                        # 1. Go to search engine homepage (ya.ru is faster/cleaner)
+                        logger.info("Navigating to ya.ru for human-like search...")
+                        page.goto("https://ya.ru")
+
+                        # 2. Wait for search input
+                        # ya.ru usually has input with name="text" or id="text"
+                        search_input = page.locator(
+                            "input[name='text'], input#text, input[type='search']"
+                        ).first
+                        search_input.wait_for(state="visible", timeout=5000)
+
+                        # 3. Type the query with delay to simulate human typing
+                        # 50-150ms delay per keystroke
+                        logger.info(f"Typing query: {step.description}")
+                        search_input.click()
+                        search_input.type(step.description, delay=100)
+
+                        # 4. Press Enter
+                        page.keyboard.press("Enter")
+
+                        # Handle popups on search result page
+                        try:
+                            # Give it a moment to start loading
+                            page.wait_for_timeout(1000)
+                            self.browser_controller.handle_popups()
+                        except Exception:
+                            pass
+
+                        # Wait for results to load
+                        try:
+                            page.wait_for_selector(
+                                "ul.serp-list, #search-result, .main__content, .serp-item",
+                                timeout=5000,
+                            )
+                        except Exception:
+                            pass  # Might be different layout, but we are on the page
+
+                        result = f"Typed '{step.description}' into search and navigated to results."
                     except Exception as e:
-                        result = f"Search API failed: {e}"
+                        logger.error(f"Human-like search failed: {e}")
+                        # Fallback to direct URL navigation if typing fails
+                        try:
+                            import urllib.parse
+
+                            query = urllib.parse.quote(step.description)
+                            search_url = f"https://yandex.ru/search/?text={query}"
+                            logger.info(
+                                f"Fallback: Navigating directly to {search_url}"
+                            )
+                            page.goto(search_url)
+                            result = f"Navigated to search results for '{step.description}' (Fallback)"
+                        except Exception as fallback_error:
+                            result = f"Search failed completely: {fallback_error}"
                 else:
                     result = self.vision_agent.execute_step(
-                        step, page, check_stop_callback=lambda: self._stop_requested
+                        step,
+                        page,
+                        check_stop_callback=lambda: self._stop_requested,
+                        stream_callback=stream_callback,
                     )
 
                 results.append(f"Step {step.step_id}: {result}")
@@ -182,12 +277,21 @@ class Orchestrator:
                     print(f"\n--- [DEBUG] Step {step.step_id} Completed ---")
                     print(f"Action: {step.action}")
                     print(f"Result: {result}")
-                    user_input = input(
-                        "Press Enter to continue (replan), or 'q' to quit: "
-                    )
-                    if user_input.lower() == "q":
-                        logger.info("Execution stopped by user (debug mode).")
-                        break
+                    # user_input = input(
+                    #     "Press Enter to continue (replan), or 'q' to quit: "
+                    # )
+                    # if user_input.lower() == "q":
+                    #     logger.info("Execution stopped by user (debug mode).")
+                    #     break
+
+                # Attempt to handle popups via script before capturing state
+                try:
+                    if self.browser_controller.handle_popups():
+                        logger.info("Popups handled via script.")
+                        # Give a moment for animations to finish
+                        page.wait_for_timeout(500)
+                except Exception as e:
+                    logger.warning(f"Popup handling failed: {e}")
 
                 # Capture State
                 try:
@@ -273,11 +377,11 @@ class Orchestrator:
                             print("\n" + "!" * 50)
                             print("AGENT IS STUCK. Please provide a hint or strategy.")
                             print(f"Last error: {last_entry['result']}")
-                            user_hint = input(
-                                "Your hint (or press Enter to continue): "
-                            )
-                            if user_hint.strip():
-                                cycle_warning += f"\nUSER HINT: {user_hint}"
+                            # user_hint = input(
+                            #     "Your hint (or press Enter to continue): "
+                            # )
+                            # if user_hint.strip():
+                            #     cycle_warning += f"\nUSER HINT: {user_hint}"
                             print("!" * 50 + "\n")
 
                     # Check previous entries for exact duplicates
@@ -332,6 +436,7 @@ class Orchestrator:
                         current_url=current_url,
                         dom_elements=dom_str,
                         history=full_context_str,
+                        status_callback=stream_callback,
                     )
                     print(f"[PLANNER LOG] Updated Plan: {new_plan}")
 
@@ -364,6 +469,7 @@ class Orchestrator:
                             dom_elements=dom_str,
                             history=full_context_str,
                             screenshot_path=real_screenshot_path,
+                            status_callback=stream_callback,
                         )
 
                     # 3. Critique Step (Self-Correction)
@@ -410,8 +516,24 @@ class Orchestrator:
                         and new_plan.steps[0].action == "extract"
                         and "complete" in new_plan.steps[0].description.lower()
                     ):
-                        logger.info("Planner indicates task completion.")
-                        break
+                        # Double check: Did we actually do anything?
+                        if len(execution_history) == 0:
+                            logger.warning(
+                                "Planner tried to finish without any actions. Forcing replan."
+                            )
+                            full_context_str += "\nCRITICAL ERROR: You cannot finish the task without performing any actions (navigate, search, etc.). You are in a new browser session. You MUST navigate to the target site first."
+                            new_plan = self.planner.update_plan(
+                                task=user_request,
+                                last_step_desc=step.description,
+                                last_step_result=result,
+                                current_url=current_url,
+                                dom_elements=dom_str,
+                                history=full_context_str,
+                                status_callback=stream_callback,
+                            )
+                        else:
+                            logger.info("Planner indicates task completion.")
+                            break
 
                     plan = new_plan
                     logger.info(f"New plan: {len(plan.steps)} steps")

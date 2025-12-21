@@ -4,7 +4,7 @@ import re
 import time
 from typing import Any
 
-from playwright.sync_api import Locator, Page
+from playwright.sync_api import Frame, Locator, Page
 
 from src.planner.models import Step
 from src.vlm.agent import VLMAgent as RealVLMAgent
@@ -113,14 +113,14 @@ class VisionAgent:
             time.sleep(delay)
 
     def _solve_captcha(self, page: Page) -> None:
-        """Attempts to solve CAPTCHA automatically by clicking checkboxes."""
+        """Attempts to solve CAPTCHA automatically using VLM."""
         print("Attempting to solve CAPTCHA automatically...")
         time.sleep(2)  # Wait for load
 
-        # Try to find and click the checkbox
+        # 1. Try to find and click the checkbox (I am not a robot)
         clicked = False
 
-        # 1. Search in frames (ReCaptcha / Cloudflare)
+        # Search in frames (ReCaptcha / Cloudflare)
         for frame in page.frames:
             try:
                 if (
@@ -152,7 +152,7 @@ class VisionAgent:
                 continue
 
         if not clicked:
-            # 2. Search in main page (Custom or Shadow DOM)
+            # Search in main page (Custom or Shadow DOM)
             try:
                 # Look for "I am not a robot" text or similar
                 labels = page.get_by_text("I am not a robot")
@@ -164,15 +164,86 @@ class VisionAgent:
                 pass
 
         if clicked:
-            print("Captcha interaction performed. Waiting 5s for results...")
-            time.sleep(5)
+            print("Captcha interaction performed. Waiting for challenge...")
+            time.sleep(3)
         else:
-            print(
-                "Automatic solution failed (no checkbox found). Pausing for manual solving..."
-            )
-            time.sleep(15)
+            print("No checkbox found. Checking for visible challenge directly...")
 
-    def _mark_page(self, page: Page) -> int:
+        # 2. Check for Visual Challenge (Grid)
+        # Usually appears in a new iframe after clicking checkbox
+        challenge_frame = None
+        for frame in page.frames:
+            # reCAPTCHA challenge frame often has 'bframe' in name or specific URL
+            if (
+                (
+                    "recaptcha/api2/bframe" in frame.url
+                    or "hcaptcha.com/iframe" in frame.url
+                )
+                and (
+                    frame.locator("table").count() > 0
+                    or frame.locator(".rc-imageselect-table-33").count() > 0
+                )
+            ):
+                challenge_frame = frame
+                print(f"Found CAPTCHA challenge frame: {frame.url}")
+                break
+
+        if challenge_frame and self.vlm.client:
+            print("Visual CAPTCHA detected. Attempting to solve with VLM...")
+
+            try:
+                # Mark elements inside the frame
+                self._mark_page(challenge_frame)
+
+                # Screenshot the page (marks should be visible)
+                screenshot_path = "screenshots/captcha_challenge.png"
+                page.screenshot(path=screenshot_path)
+
+                # Ask VLM
+                prompt = """
+This is a CAPTCHA challenge.
+1. Read the instruction text (usually at the top, e.g. 'Select all traffic lights').
+2. Identify the numbered yellow boxes that match the instruction.
+3. Also identify the 'Verify', 'Next', or 'Skip' button.
+Return the numbers of the matching images and the button as a JSON list of integers.
+Example: [1, 3, 5, 9] (where 9 is the button)
+"""
+
+                response = self.vlm._call_vlm(
+                    screenshot_path,
+                    "You are a captcha solver. Return ONLY JSON.",
+                    prompt,
+                )
+                print(f"VLM Captcha Response: {response}")
+
+                # Parse IDs
+                ids = [int(x) for x in re.findall(r"\b\d+\b", response)]
+
+                # Click them
+                for i in ids:
+                    print(f"Clicking captcha element {i}...")
+                    try:
+                        # Click via JS in the frame
+                        challenge_frame.evaluate(
+                            f"if(window.som_elements && window.som_elements[{i}]) window.som_elements[{i}].click()"
+                        )
+                        time.sleep(random.uniform(0.5, 1.5))
+                    except Exception as e:
+                        print(f"Failed to click captcha element {i}: {e}")
+
+                # Unmark
+                self._unmark_page(challenge_frame)
+
+                print("Captcha solution submitted. Waiting...")
+                time.sleep(3)
+
+            except Exception as e:
+                print(f"Error solving captcha with VLM: {e}")
+
+        else:
+            print("No visual challenge found or VLM not available.")
+
+    def _mark_page(self, page: Page | Frame) -> int:
         """
         Injects JavaScript to draw numbered boxes on interactive elements (Set-of-Marks).
         """
@@ -191,8 +262,9 @@ class VisionAgent:
                 // Filter by tag/role first for performance
                 const tag = el.tagName.toLowerCase();
                 const role = el.getAttribute('role');
-                const isInteractiveTag = ['a', 'button', 'input', 'textarea', 'select', 'img', 'svg'].includes(tag);
-                const isInteractiveRole = ['button', 'link', 'checkbox', 'menuitem', 'tab', 'option', 'switch'].includes(role);
+                const isInteractiveTag = ['a', 'button', 'input', 'textarea', 'select', 'img', 'svg', 'td'].includes(tag);
+                const isInteractiveRole = ['button', 'link', 'checkbox', 'menuitem', 'tab', 'option', 'switch', 'gridcell'].includes(role);
+                const isCaptchaTable = el.closest('table') !== null; // Captcha images are often in tables
 
                 // Check computed style for cursor pointer (expensive, so do it last)
                 let isClickableStyle = false;
@@ -201,7 +273,7 @@ class VisionAgent:
                      isClickableStyle = style.cursor === 'pointer';
                 }
 
-                if (isInteractiveTag || isInteractiveRole || isClickableStyle) {
+                if (isInteractiveTag || isInteractiveRole || isClickableStyle || isCaptchaTable) {
                     const rect = el.getBoundingClientRect();
                     if (rect.width > 0 && rect.height > 0 && window.getComputedStyle(el).visibility !== 'hidden') {
                         // Check if in viewport
@@ -242,7 +314,7 @@ class VisionAgent:
             print(f"SoM marking failed: {e}")
             return 0
 
-    def _unmark_page(self, page: Page) -> None:
+    def _unmark_page(self, page: Page | Frame) -> None:
         try:
             page.evaluate(
                 "document.querySelectorAll('.som-marker').forEach(e => e.remove());"
@@ -293,7 +365,11 @@ class VisionAgent:
             pass
 
     def verify_step(
-        self, step: Step, page: Page, execution_result: str
+        self,
+        step: Step,
+        page: Page,
+        execution_result: str,
+        stream_callback: Any = None,
     ) -> tuple[bool, str]:
         """
         Проверяет, был ли шаг выполнен успешно.
@@ -311,7 +387,9 @@ class VisionAgent:
 
             if self.vlm.client:
                 is_valid, reason = self.vlm.verify_state(
-                    screenshot_path, step.expected_result
+                    screenshot_path,
+                    step.expected_result,
+                    stream_callback=stream_callback,
                 )
                 if not is_valid:
                     return False, f"VLM Verification Failed: {reason}"
@@ -350,7 +428,11 @@ class VisionAgent:
             pass
 
     def execute_step(
-        self, step: Step, page: Page, check_stop_callback: Any = None
+        self,
+        step: Step,
+        page: Page,
+        check_stop_callback: Any = None,
+        stream_callback: Any = None,
     ) -> str:
         """
         Выполняет один шаг плана.
@@ -523,6 +605,11 @@ class VisionAgent:
 
                 return "Failed to navigate: No URL found"
 
+            elif step.action == "solve_captcha":
+                print("Explicitly solving CAPTCHA requested by Planner.")
+                self._solve_captcha(page)
+                return "Attempted to solve CAPTCHA."
+
             elif step.action == "type":
                 text_to_type = "Python"
                 match = re.search(r"['\"](.*?)['\"]", step.description)
@@ -582,6 +669,7 @@ class VisionAgent:
                         vlm_resp = self.vlm.get_target_id(
                             screenshot_path,
                             "Click on the search input field or text box",
+                            stream_callback=stream_callback,
                         )
                         print(f"[VLM LOG] VLM Response for 'type' target: {vlm_resp}")
                         match = re.search(r":id:(\d+):", vlm_resp)
@@ -836,7 +924,9 @@ class VisionAgent:
 
                             # 4. Ask VLM for ID
                             vlm_resp = self.vlm.get_target_id(
-                                screenshot_path, step.description
+                                screenshot_path,
+                                step.description,
+                                stream_callback=stream_callback,
                             )
                             print(
                                 f"[VLM LOG] VLM SoM Response (Attempt {attempt + 1}): {vlm_resp}"
@@ -928,7 +1018,9 @@ class VisionAgent:
                         self._unmark_page(page)
 
                         vlm_resp = self.vlm.get_target_id(
-                            screenshot_path, step.description
+                            screenshot_path,
+                            step.description,
+                            stream_callback=stream_callback,
                         )
                         print(f"[VLM LOG] VLM Response for 'hover' target: {vlm_resp}")
                         match = re.search(r":id:(\d+):", vlm_resp)
@@ -1042,7 +1134,9 @@ class VisionAgent:
                         page.screenshot(path=screenshot_path)
 
                         extraction_result = self.vlm.extract_data(
-                            screenshot_path, step.description
+                            screenshot_path,
+                            step.description,
+                            stream_callback=stream_callback,
                         )
                         return f"VLM Extracted Data: {extraction_result}"
                     except Exception as e:

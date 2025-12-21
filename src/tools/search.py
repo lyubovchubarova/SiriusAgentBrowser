@@ -7,10 +7,11 @@ import requests
 
 def yandex_search(
     query: str, folder_id: str | None = None, api_key: str | None = None
-) -> list[dict[str, str]]:
+) -> list[dict[str, str]] | None:
     """
     Performs a search query using Yandex.Cloud Search API (Yandex.XML).
     Returns a list of dictionaries with 'title', 'url', and 'snippet'.
+    Returns None if the API call fails.
     """
     folder_id = folder_id or os.getenv("YANDEX_CLOUD_FOLDER")
     api_key = api_key or os.getenv("YANDEX_CLOUD_API_KEY")
@@ -32,12 +33,13 @@ def yandex_search(
     }
 
     try:
-        response = requests.get(url, params=params, timeout=10)
+        response = requests.get(url, params=params, timeout=5)
         response.raise_for_status()
         content = response.content
     except Exception as e:
         print(f"Error performing search: {e}")
-        return []
+        # Return None to indicate error, distinct from empty list (no results)
+        return None
 
     try:
         root = ET.fromstring(content)

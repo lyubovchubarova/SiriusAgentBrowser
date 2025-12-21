@@ -30,7 +30,11 @@ Write-Host "Launching Chrome from: $ChromeExe"
 Write-Host "Debug port: 9222"
 Write-Host "Profile: $ProfileDir"
 
+# Calculate extension path
+$ExtensionPath = Join-Path (Split-Path $PSScriptRoot -Parent) "extension"
+Write-Host "Loading extension from: $ExtensionPath"
+
 # Launch process
-Start-Process -FilePath $ChromeExe -ArgumentList "--remote-debugging-port=9222", "--user-data-dir=`"$ProfileDir`"", "--no-first-run", "--no-default-browser-check"
+Start-Process -FilePath $ChromeExe -ArgumentList "--remote-debugging-port=9222", "--user-data-dir=`"$ProfileDir`"", "--no-first-run", "--no-default-browser-check", "--load-extension=`"$ExtensionPath`""
 
 Write-Host "Chrome launched. You can now run the agent."
