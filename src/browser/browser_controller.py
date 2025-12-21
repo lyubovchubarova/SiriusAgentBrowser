@@ -299,7 +299,7 @@ class BrowserController:
         Useful for LLM planning.
         """
         try:
-            snapshot = cast(Any, self.page).accessibility.snapshot()
+            snapshot = cast("Any", self.page).accessibility.snapshot()
 
             def process_node(node: dict[str, Any], depth: int = 0) -> str:
                 indent = "  " * depth
