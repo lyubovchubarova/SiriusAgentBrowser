@@ -18,7 +18,7 @@ document.addEventListener("DOMContentLoaded", () => {
 		localStorage.setItem("theme", isDark ? "dark" : "light");
 		themeToggle.textContent = isDark ? "☀️" : "🌙";
 	});
-	
+
 	const chatContainer = document.getElementById("chat-container");
 	const promptInput = document.getElementById("prompt-input");
 	const sendBtn = document.getElementById("send-btn");
@@ -242,4 +242,86 @@ document.addEventListener("DOMContentLoaded", () => {
 			sendMessage();
 		}
 	});
+
+	const micBtn = document.getElementById("mic-btn");
+    let recognition = null;
+
+    // Проверяем поддержку API
+    if ('webkitSpeechRecognition' in window) {
+        recognition = new webkitSpeechRecognition();
+        recognition.continuous = false; // Остановить запись после одной фразы
+        recognition.interimResults = true; // Показывать текст в процессе говорения
+        recognition.lang = 'ru-RU'; // Установите нужный язык
+
+        recognition.onstart = () => {
+            micBtn.classList.add("listening");
+            promptInput.placeholder = "Говорите...";
+        };
+
+        recognition.onend = () => {
+            micBtn.classList.remove("listening");
+            promptInput.placeholder = isConnected ? "Введите задачу..." : "Connecting...";
+            promptInput.focus();
+        };
+
+		recognition.onresult = (event) => {
+            let finalTranscript = '';
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    finalTranscript += event.results[i][0].transcript;
+                }
+            }
+
+            if (finalTranscript) {
+                const currentText = promptInput.value;
+                const prefix = (currentText && !currentText.endsWith(' ')) ? ' ' : '';
+                
+                // 1. Добавляем распознанный текст в инпут
+                promptInput.value = currentText + prefix + finalTranscript;
+
+                // 2. Останавливаем распознавание (чтобы не слушало лишнего)
+                recognition.stop();
+
+                // 3. АВТОМАТИЧЕСКАЯ ОТПРАВКА
+                // Делаем небольшую задержку (300мс), чтобы пользователь увидел текст перед отправкой
+                setTimeout(() => {
+                    sendMessage();
+                }, 300);
+            }
+        };
+
+        recognition.onerror = (event) => {
+            console.error("Speech recognition error", event.error);
+            micBtn.classList.remove("listening");
+            
+            // КЛЮЧЕВОЙ МОМЕНТ: Обработка отсутствия прав
+            if (event.error === 'not-allowed' || event.error === 'permission-denied') {
+                addStatus("Требуется разрешение на микрофон.");
+                // Открываем страницу разрешения в новой вкладке
+                chrome.tabs.create({ url: 'permission.html' });
+            }
+        };
+	} else {
+		micBtn.style.display = 'none'; // Скрыть кнопку, если браузер не поддерживает
+		console.warn("Web Speech API not supported");
+	}
+
+    micBtn.addEventListener("click", () => {
+        if (!recognition) return;
+
+        if (micBtn.classList.contains("listening")) {
+            recognition.stop();
+        } else {
+            // Если соединение еще не установлено, не даем говорить (опционально)
+            if (!isConnected) {
+                addStatus("Дождитесь соединения с сервером.");
+                return;
+            }
+            try {
+                recognition.start();
+            } catch (e) {
+                console.error(e);
+            }
+        }
+    });
 });

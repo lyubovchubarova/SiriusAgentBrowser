@@ -260,6 +260,55 @@
 				fill: white;
 			}
 
+			#mic-btn {
+				background-color: transparent; /* Или var(--input-bg) если хотите фон */
+				color: #007aff;
+				border: 1px solid var(--border-color); /* Опционально, можно убрать */
+				border: none;
+				border-radius: 50%;
+				width: 36px;
+				height: 36px;
+				cursor: pointer;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				margin-right: 5px; /* Отступ от инпута */
+				transition: all 0.2s;
+			}
+
+			#mic-btn svg {
+				width: 20px;
+				height: 20px;
+				fill: #8a8a8a; /* Цвет иконки в покое */
+			}
+
+			#mic-btn:hover svg {
+				fill: #007aff;
+			}
+
+			/* Стиль, когда микрофон активен (слушает) */
+			#mic-btn.listening {
+				background-color: #ff3b30;
+				animation: pulse 1.5s infinite;
+			}
+
+			#mic-btn.listening svg {
+				fill: white;
+			}
+
+			@keyframes pulse {
+				0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7); }
+				70% { transform: scale(1.1); box-shadow: 0 0 0 6px rgba(255, 59, 48, 0); }
+				100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 59, 48, 0); }
+			}
+
+			/* В темной теме поправим цвет иконки */
+			body.dark #mic-btn svg {
+				fill: #9a9a9c;
+			}
+			body.dark #mic-btn:hover svg {
+				fill: #0a84ff;
+			}
 			::-webkit-scrollbar {
 				width: 8px;
 			}
@@ -283,17 +332,26 @@
 		</div>
 
 		<div id="input-area">
+			<button id="mic-btn" title="Голосовой ввод">
+				<svg viewBox="0 0 24 24">
+					<path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 2.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+					<path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+				</svg>
+			</button>
+
 			<input
 				type="text"
 				id="prompt-input"
 				placeholder="Введите задачу..."
 				autocomplete="off"
 			/>
+			
 			<button id="stop-btn" title="Остановить">
 				<svg viewBox="0 0 24 24">
 					<rect x="6" y="6" width="12" height="12"></rect>
 				</svg>
 			</button>
+			
 			<button id="send-btn">
 				<svg viewBox="0 0 24 24">
 					<path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
