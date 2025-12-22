@@ -145,7 +145,9 @@ class AgentWorker(threading.Thread):
         load_dotenv()
         provider = os.getenv("LLM_PROVIDER", "yandex")
         model = os.getenv("LLM_MODEL", "gpt-4o")
-        cdp_url = os.getenv("CDP_URL", "http://127.0.0.1:9222")
+        cdp_url = os.getenv("CDP_URL")  # Default to None to launch internal browser
+        headless = "false"
+        # headless = os.getenv("HEADLESS", "false").lower() == "true"
 
         logger.info("Initializing Orchestrator in worker thread...")
 
@@ -154,7 +156,7 @@ class AgentWorker(threading.Thread):
         for i in range(max_retries):
             try:
                 self.orchestrator = Orchestrator(
-                    headless=False,
+                    headless=headless,
                     debug_mode=False,
                     llm_provider=provider,
                     llm_model=model,

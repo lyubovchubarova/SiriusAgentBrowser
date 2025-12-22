@@ -1,11 +1,15 @@
 import logging
+import uuid
 from typing import TYPE_CHECKING, Any
 
 from src.browser.browser_controller import BrowserController, BrowserOptions
 from src.browser.debug_wrapper import DebugWrapper
 from src.memory.long_term_memory import LongTermMemory
 from src.planner.planner import Planner
+from src.tools.search import yandex_search
 from src.vlm.vlm import VisionAgent
+from src.logger_db import log_action
+from pathlib import Path
 
 if TYPE_CHECKING:
     from src.planner.models import Plan
@@ -65,7 +69,15 @@ class Orchestrator:
         3. Выполняет каждый шаг плана с помощью VisionAgent.
         4. Возвращает результат.
         """
-        logger.info(f"Processing request: {user_request}")
+        session_id = str(uuid.uuid4())
+        logger.info(f"Processing request: {user_request} (Session ID: {session_id})")
+        log_action(
+            "Orchestrator",
+            "REQUEST_START",
+            f"Processing request: {user_request}",
+            {"request": user_request},
+            session_id=session_id,
+        )
         self._stop_requested = False
 
         def report_status(msg: str) -> None:
@@ -78,6 +90,13 @@ class Orchestrator:
             report_status("Analyzing request...")
             intent = self.planner.classify_intent(user_request)
             logger.info(f"Intent classified as: {intent}")
+            log_action(
+                "Planner",
+                "INTENT_CLASSIFIED",
+                f"Intent: {intent}",
+                {"intent": intent},
+                session_id=session_id,
+            )
 
             if intent == "chat":
                 report_status("Generating answer...")
@@ -128,6 +147,13 @@ class Orchestrator:
 
             print(f"[PLANNER LOG] Plan received: {plan}")
             logger.info(f"Plan created: {plan.task} ({len(plan.steps)} steps)")
+            log_action(
+                "Planner",
+                "PLAN_CREATED",
+                f"Plan created with {len(plan.steps)} steps",
+                {"task": plan.task, "steps": [s.description for s in plan.steps]},
+                session_id=session_id,
+            )
             report_status(f"Plan created: {len(plan.steps)} steps")
 
             # 2. Запуск браузера
@@ -157,16 +183,19 @@ class Orchestrator:
 
                 step = plan.steps[0]  # Always take the first step of the current plan
 
-                # Handle 'finish' action
                 if step.action == "finish":
                     logger.info(f"Task completed: {step.description}")
-                    results.append(f"Task completed: {step.description}")
 
                     # Extract content for summary
                     try:
                         final_page_content = page.evaluate("document.body.innerText")
+                        if len(final_page_content) > 5000:
+                            final_page_content = final_page_content[:5000] + "..."
                     except Exception:
                         final_page_content = "Could not extract content."
+
+                    result = f"Task Completed. Final Page Content Summary: {final_page_content[:500]}"  # Short summary for result
+                    results.append(result)
 
                     # Add to history so memory saver knows we finished
                     execution_history.append(
@@ -182,6 +211,17 @@ class Orchestrator:
                 step_count += 1
 
                 logger.info(f"Step {step.step_id}: {step.description}")
+                log_action(
+                    "Orchestrator",
+                    "STEP_START",
+                    f"Starting step {step.step_id}: {step.description}",
+                    {
+                        "step_id": step.step_id,
+                        "description": step.description,
+                        "action": step.action,
+                    },
+                    session_id=session_id,
+                )
 
                 # Execute
                 if step.action == "ask_user":
@@ -205,64 +245,136 @@ class Orchestrator:
                     result = f"User answered: {user_answer}"
                     logger.info(f"User answer received: {user_answer}")
 
+                # Handle 'extract' action specifically
+                elif step.action == "extract":
+                    logger.info(f"Executing Extraction: {step.description}")
+                    try:
+                        # Prefer text extraction from DOM over screenshot
+                        page_text = page.evaluate("document.body.innerText")
+                        # Limit text length to avoid token limits
+                        if len(page_text) > 10000:
+                            page_text = page_text[:10000] + "...(truncated)"
+
+                        result = f"Extracted Text:\n{page_text}"
+
+                        # If the user asked for this info, we should probably return it or save it
+                        # For now, it goes into the execution history which the planner sees
+                    except Exception as e:
+                        logger.error(f"Text extraction failed: {e}")
+                        result = f"Failed to extract text: {e}"
+
                 elif step.action == "search":
                     logger.info(f"Executing Search: {step.description}")
-                    # User prefers using the address bar for searching instead of API
-                    # This mimics a user typing in the address bar
-                    try:
-                        # 1. Go to search engine homepage (ya.ru is faster/cleaner)
-                        logger.info("Navigating to ya.ru for human-like search...")
-                        page.goto("https://ya.ru")
 
-                        # 2. Wait for search input
-                        # ya.ru usually has input with name="text" or id="text"
-                        search_input = page.locator(
-                            "input[name='text'], input#text, input[type='search']"
-                        ).first
-                        search_input.wait_for(state="visible", timeout=5000)
+                    # Try Yandex Search API first
+                    api_results = yandex_search(step.description)
 
-                        # 3. Type the query with delay to simulate human typing
-                        # 50-150ms delay per keystroke
-                        logger.info(f"Typing query: {step.description}")
-                        search_input.click()
-                        search_input.type(step.description, delay=100)
+                    if api_results is not None:
+                        logger.info(
+                            f"Yandex Search API successful. Found {len(api_results)} results."
+                        )
 
-                        # 4. Press Enter
-                        page.keyboard.press("Enter")
+                        # Generate HTML for the agent to "see"
+                        html_content = "<html><body><h1>Search Results</h1><ul>"
+                        text_summary = f"Search Results for '{step.description}':\n"
 
-                        # Handle popups on search result page
-                        try:
-                            # Give it a moment to start loading
-                            page.wait_for_timeout(1000)
-                            self.browser_controller.handle_popups()
-                        except Exception:
-                            pass
+                        for item in api_results:
+                            title = item.get("title", "No Title")
+                            url = item.get("url", "#")
+                            snippet = item.get("snippet", "")
 
-                        # Wait for results to load
-                        try:
-                            page.wait_for_selector(
-                                "ul.serp-list, #search-result, .main__content, .serp-item",
-                                timeout=5000,
+                            html_content += (
+                                f"<li><a href='{url}'>{title}</a><p>{snippet}</p></li>"
                             )
-                        except Exception:
-                            pass  # Might be different layout, but we are on the page
+                            text_summary += f"- {title}: {snippet} ({url})\n"
 
-                        result = f"Typed '{step.description}' into search and navigated to results."
-                    except Exception as e:
-                        logger.error(f"Human-like search failed: {e}")
-                        # Fallback to direct URL navigation if typing fails
+                        html_content += "</ul></body></html>"
+
+                        # Save to a temp file and navigate
                         try:
-                            import urllib.parse
+                            temp_dir = Path("temp")
+                            temp_dir.mkdir(exist_ok=True)
+                            search_file = temp_dir / "search_results.html"
+                            search_file.write_text(html_content, encoding="utf-8")
 
-                            query = urllib.parse.quote(step.description)
-                            search_url = f"https://yandex.ru/search/?text={query}"
-                            logger.info(
-                                f"Fallback: Navigating directly to {search_url}"
-                            )
-                            page.goto(search_url)
-                            result = f"Navigated to search results for '{step.description}' (Fallback)"
-                        except Exception as fallback_error:
-                            result = f"Search failed completely: {fallback_error}"
+                            page.goto(search_file.resolve().as_uri())
+                            result = text_summary
+                        except Exception as e:
+                            logger.error(f"Failed to render search results: {e}")
+                            # Fallback to manual if rendering fails?
+                            # Or just return text summary.
+                            result = text_summary
+
+                    else:
+                        logger.warning(
+                            "Yandex Search API failed (returned None). Falling back to manual search."
+                        )
+                        log_action(
+                            "Orchestrator",
+                            "SEARCH_FALLBACK",
+                            "API failed, using manual search",
+                            {"query": step.description},
+                            session_id=session_id,
+                        )
+
+                        # User prefers using the address bar for searching instead of API
+                        # This mimics a user typing in the address bar
+                        try:
+                            # 1. Go to search engine homepage (ya.ru is faster/cleaner)
+                            logger.info("Navigating to ya.ru for human-like search...")
+                            page.goto("https://ya.ru")
+
+                            # 2. Wait for search input
+                            # ya.ru usually has input with name="text" or id="text"
+                            search_input = page.locator(
+                                "input[name='text'], input#text, input[type='search']"
+                            ).first
+                            search_input.wait_for(state="visible", timeout=5000)
+
+                            # 3. Type the query with delay to simulate human typing
+                            # 50-150ms delay per keystroke
+                            logger.info(f"Typing query: {step.description}")
+                            search_input.click()
+                            search_input.type(step.description, delay=100)
+
+                            # 4. Press Enter
+                            page.keyboard.press("Enter")
+
+                            # Handle popups on search result page
+                            try:
+                                # Give it a moment to start loading
+                                page.wait_for_timeout(1000)
+                                self.browser_controller.handle_popups()
+                            except Exception:
+                                pass
+
+                            # Wait for results to load
+                            try:
+                                page.wait_for_selector(
+                                    "ul.serp-list, #search-result, .main__content, .serp-item",
+                                    timeout=5000,
+                                )
+                            except Exception:
+                                pass  # Might be different layout, but we are on the page
+
+                            result = f"Typed '{step.description}' into search and navigated to results."
+                        except Exception as e:
+                            logger.error(f"Human-like search failed: {e}")
+                            # Fallback to direct URL navigation if typing fails
+                            try:
+                                import urllib.parse
+
+                                query = urllib.parse.quote(step.description)
+                                search_url = f"https://ya.ru/search/?text={query}"
+                                logger.info(
+                                    f"Fallback: Navigating directly to {search_url}"
+                                )
+                                page.goto(search_url)
+                                result = f"Navigated to search results for '{step.description}' (Fallback)"
+                            # For other actions, use VisionAgent but hint to prefer DOM interaction
+                            # For other actions, use VisionAgent but hint to prefer DOM interaction
+                            except Exception as fallback_error:
+                                result = f"Search failed completely: {fallback_error}"
                 else:
                     result = self.vision_agent.execute_step(
                         step,
@@ -272,6 +384,13 @@ class Orchestrator:
                     )
 
                 results.append(f"Step {step.step_id}: {result}")
+                log_action(
+                    "Orchestrator",
+                    "STEP_COMPLETE",
+                    f"Step {step.step_id} completed",
+                    {"result": result},
+                    session_id=session_id,
+                )
                 logger.info(f"Step {step.step_id} result: {result}")
 
                 # Add to history
@@ -368,10 +487,27 @@ class Orchestrator:
                     memory_context = ""
 
                 # Prepare history string for planner
-                # Pass FULL history to provide maximum context for the planner
+                # Context Management: "Forget" older details to save tokens
+                # We keep full details for the last few steps, but summarize older ones.
                 history_str = ""
+                total_steps = len(execution_history)
+                KEEP_FULL_CONTEXT_STEPS = 5
+
                 for i, h in enumerate(execution_history):
-                    history_str += f"- Step {i + 1}: {h['description']} (Action: {h['action']}) -> Result: {h['result']}\n"
+                    is_recent = i >= (total_steps - KEEP_FULL_CONTEXT_STEPS)
+
+                    step_desc = (
+                        f"- Step {i + 1}: {h['description']} (Action: {h['action']})"
+                    )
+                    result_text = h["result"]
+
+                    if not is_recent:
+                        # Summarize old results to avoid polluting context with stale data
+                        # especially large extracted text or DOM dumps
+                        if len(result_text) > 150:
+                            result_text = result_text[:150] + "... (history truncated)"
+
+                    history_str += f"{step_desc} -> Result: {result_text}\n"
 
                 print(
                     f"\n[PLANNER LOG] Updating plan based on history ({len(execution_history)} steps):\n{history_str}"
@@ -570,8 +706,15 @@ class Orchestrator:
             final_output = ""
             try:
                 history_text = "\n".join(results)
-                summary = self.planner.generate_summary(
-                    user_request, history_text, final_page_content
+                # Use generate_direct_answer for a better formatted response
+                context_for_answer = (
+                    f"Task: {user_request}\n\nExecution History:\n{history_text}"
+                )
+                if final_page_content:
+                    context_for_answer += f"\n\nFinal Page Content (Excerpt):\n{final_page_content[:5000]}"
+
+                summary = self.planner.generate_direct_answer(
+                    context_for_answer, stream_callback=None
                 )
                 final_output = summary
                 logger.info(f"Final Summary: {summary}")

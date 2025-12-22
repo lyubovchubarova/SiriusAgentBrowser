@@ -117,6 +117,15 @@ class Planner:
         if self.provider == "yandex":
             self.folder = os.environ["YANDEX_CLOUD_FOLDER"]
             self.model_path = os.environ["YANDEX_CLOUD_MODEL_PATH"]
+
+            # Construct full model URI for Yandex
+            # If model is just "gpt-4o" (default), replace it with Yandex model path
+            if self.model == "gpt-4o":
+                self.model = f"gpt://{self.folder}/{self.model_path}"
+            elif not self.model.startswith("gpt://"):
+                # Assume it's a model alias like "yandexgpt/rc"
+                self.model = f"gpt://{self.folder}/{self.model}"
+
             self.client = OpenAI(
                 api_key=os.environ["YANDEX_CLOUD_API_KEY"],
                 base_url=os.environ["YANDEX_CLOUD_BASE_URL"],
@@ -135,7 +144,18 @@ class Planner:
         or can be answered directly by the LLM ('chat').
         """
         prompt = f"""
-You are a classifier. Determine if the user's request requires using a web browser to perform actions (searching, navigating, clicking) OR if it can be answered directly by a language model (general knowledge, recipes, explanations).
+You are a classifier. Determine if the user's request requires using a web browser to perform actions (searching, navigating, clicking) OR if it can be answered directly by a language model.
+
+Rules:
+- Choose "agent" if the user asks to:
+  - Search for something online.
+  - Find information on a specific website.
+  - Get up-to-date news, weather, or prices.
+  - Perform an action on a website (login, click, buy).
+- Choose "chat" if the user asks for:
+  - General knowledge or explanations.
+  - Creative writing or coding help.
+  - Simple recipes or advice that doesn't require a specific source.
 
 User Request: "{user_prompt}"
 
@@ -172,7 +192,7 @@ Return ONLY one word: "agent" or "chat".
         messages = [
             {
                 "role": "system",
-                "content": "You are a helpful AI assistant. Answer the user's question directly and concisely.",
+                "content": "You are a helpful AI assistant running in 'Chat Mode'. You do not have active browser access in this mode. Answer the user's question directly using your internal knowledge. If the user needs real-time info or specific website actions, suggest they ask to 'search' or 'open' the site.",
             },
             {"role": "user", "content": user_prompt},
         ]
@@ -364,6 +384,17 @@ Return ONLY one word: "agent" or "chat".
             f"Result: {last_step_result}\n"
             f"Current URL: {current_url}\n"
             f"Visible Interactive Elements (JSON): {dom_elements}\n\n"
+            "STATE VERIFICATION PROTOCOL:\n"
+            "1. DID THE LAST STEP SUCCEED?\n"
+            "   - Look at 'Result'. If it says 'Failed', 'Error', or 'No target found', the last step FAILED.\n"
+            "   - If it failed, do NOT proceed to the next logical step. You MUST retry with a DIFFERENT selector, or use a fallback strategy (e.g. search instead of click).\n"
+            "2. WHERE AM I?\n"
+            "   - Look at 'Current URL'. Does it match the expected destination?\n"
+            "   - If you expected to be on a specific page but are still on 'google.com' or 'yandex.ru', the navigation FAILED. You must try clicking again or searching.\n"
+            "3. WHAT DO I SEE?\n"
+            "   - Look at 'Visible Interactive Elements'.\n"
+            "   - Do NOT hallucinate elements. If you want to click 'Search', make sure an element with text 'Search' or a search icon is in the list.\n"
+            "   - If the list is empty or doesn't contain what you need, use 'needs_vision': true to get a screenshot.\n\n"
             "CRITICAL: Check if the Original Task is FULLY completed based on the Result and Current URL.\n"
             "For example, if the task asks to 'extract' or 'print' something, ensure that information is ALREADY in the 'Result' of the previous step.\n"
             "If the task is NOT fully completed, generate the next steps.\n"

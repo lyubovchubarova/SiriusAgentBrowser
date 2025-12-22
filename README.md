@@ -13,14 +13,58 @@ src/
 ```
 
 ## Быстрый старт
-### Windows
+
+### Предварительные требования
+
+-   Python 3.10+
+-   Google Chrome
+
+### Установка
+
+1. Клонируйте репозиторий
+2. Создайте виртуальное окружение и установите зависимости:
+
 ```bash
 python -m venv venv
+# Windows
 venv\Scripts\activate
+# Mac/Linux
+source venv/bin/activate
+
 pip install -r requirements.txt
 playwright install
-python src/main.py
 ```
+
+### Запуск
+
+#### Windows
+
+Запустите `start_agent.bat` или выполните команды вручную:
+
+```powershell
+.\scripts\start_all.ps1
+```
+
+#### Mac / Linux
+
+Запустите `start_agent.sh` или выполните команды вручную:
+
+```bash
+chmod +x start_agent.sh scripts/*.sh
+./start_agent.sh
+```
+
+Это запустит:
+
+1. Google Chrome в режиме отладки (порт 9222) с загруженным расширением.
+2. Сервер агента (порт 8000).
+
+После запуска откройте боковую панель в Chrome, чтобы взаимодействовать с агентом.
+
+## Особенности поиска
+
+Агент использует "человекоподобный" поиск через навигацию на `ya.ru`.
+**Примечание:** Search API (`src/tools/search.py`) в данный момент не используется агентом, предпочтение отдается визуальному взаимодействию с браузером.
 
 ## Разработка
 
@@ -33,8 +77,3 @@ mypy src/           # проверка типов
 ## Лицензия
 
 MIT
-
-
-
-
-
