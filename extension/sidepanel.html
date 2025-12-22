@@ -4,6 +4,47 @@
 		<meta charset="UTF-8" />
 		<title>Sirius Agent</title>
 		<style>
+			:root {
+				--input-bg: #ffffff;
+    			--input-border: #dcdcdc;
+    			--input-text: #1f1f1f;
+    			--input-placeholder: #8a8a8a;
+    			--user-text: #ffffff;
+				--bg-main: #f5f5f5;
+				--bg-panel: #ffffff;
+				--text-main: #333;
+				--agent-bg: #ffffff;
+				--user-bg: #007aff;
+				--thinking-bg: #e8e8e8;
+				--border-color: #e0e0e0;
+				--thinking-bg: #e8e8e8;
+				--thinking-header-bg: #dcdcdc;
+				--thinking-border: #d0d0d0;
+				--thinking-text: #333;
+				--scroll-track: #f0f0f0;
+    			--scroll-thumb: #c0c0c0;
+			}
+
+			body.dark {
+				--bg-main: #1e1e1e;
+				--bg-panel: #2a2a2a;
+				--text-main: #e0e0e0;
+				--border-color: #444;
+				--agent-bg: #2f2f31;
+    			--user-bg: #0a84ff;
+    			--user-text: #ffffff;
+				--thinking-bg: #232325;
+    			--thinking-header-bg: #303032;
+    			--thinking-border: #3a3a3c;
+    			--thinking-text: #d6d6d6;
+				--input-bg: #1f1f21;
+    			--input-border: #3a3a3c;
+    			--input-text: #f2f2f2;
+    			--input-placeholder: #9a9a9c;
+				--scroll-track: #1c1c1e;
+    			--scroll-thumb: #3a3a3c;
+			}
+
 			body {
 				font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
 					Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans",
@@ -13,7 +54,8 @@
 				display: flex;
 				flex-direction: column;
 				height: 100vh;
-				background-color: #f5f5f5;
+				background-color: var(--bg-main);
+    			color: var(--text-main);
 			}
 
 			#chat-container {
@@ -32,37 +74,35 @@
 				line-height: 1.4;
 				font-size: 14px;
 				word-wrap: break-word;
-				flex-shrink: 0; /* Prevent shrinking */
 			}
 
 			.user-message {
 				align-self: flex-end;
-				background-color: #007aff;
-				color: white;
+				background-color: var(--user-bg);
+				color: var(--user-text);
 				border-bottom-right-radius: 5px;
 			}
 
 			.agent-message {
 				align-self: flex-start;
-				background-color: white;
-				color: #333;
 				border-bottom-left-radius: 5px;
 				box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+				background-color: var(--agent-bg);
+    			color: var(--text-main);
 			}
 
 			.thinking-container {
 				align-self: flex-start;
-				background-color: #e8e8e8;
 				border-radius: 8px;
 				margin-bottom: 8px;
 				max-width: 95%;
-				border: 1px solid #d0d0d0;
 				overflow: hidden;
 				display: flex;
 				flex-direction: column;
 				box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 				animation: fadeIn 0.3s ease-out;
-				flex-shrink: 0; /* Prevent shrinking */
+				background-color: var(--thinking-bg);
+    			border: 1px solid var(--thinking-border);
 			}
 
 			@keyframes fadeIn {
@@ -78,20 +118,20 @@
 
 			.thinking-header {
 				padding: 6px 10px;
-				background-color: #dcdcdc;
 				cursor: pointer;
 				display: flex;
 				justify-content: space-between;
 				align-items: center;
 				font-size: 11px;
 				font-weight: 600;
-				color: #555;
 				user-select: none;
 				transition: background-color 0.2s;
+    			color: var(--thinking-text);
+				background-color: var(--thinking-header-bg);
 			}
 
 			.thinking-header:hover {
-				background-color: #d0d0d0;
+				background-color: rgba(255, 255, 255, 0.05);
 			}
 
 			.thinking-content {
@@ -101,11 +141,11 @@
 				line-height: 1.4;
 				white-space: pre-wrap;
 				word-wrap: break-word;
-				color: #333;
-				background-color: #e8e8e8;
 				display: block;
-				max-height: 600px; /* Increased max-height */
+				max-height: 300px;
 				overflow-y: auto;
+				background-color: var(--thinking-bg);
+    			color: var(--thinking-text);
 			}
 
 			.thinking-content.collapsed {
@@ -117,9 +157,10 @@
 				display: inline-block;
 				vertical-align: bottom;
 				animation: blink 1s step-start infinite;
-				color: #888;
 				margin-left: 2px;
 				font-size: 10px;
+				color: var(--thinking-text);
+    			opacity: 0.6;
 			}
 
 			@keyframes blink {
@@ -142,23 +183,38 @@
 
 			#input-area {
 				padding: 15px;
-				background-color: white;
-				border-top: 1px solid #e0e0e0;
 				display: flex;
 				gap: 10px;
+				background-color: var(--bg-panel);
+    			border-top: 1px solid var(--border-color);
+			}
+			
+			#theme-toggle {
+				position: absolute;
+				top: 10px;
+				right: 10px;
+				cursor: pointer;
+				font-size: 18px;
+				user-select: none;
 			}
 
 			#prompt-input {
 				flex: 1;
 				padding: 10px;
-				border: 1px solid #ddd;
 				border-radius: 20px;
 				outline: none;
 				font-size: 14px;
+				background-color: var(--input-bg);
+    			color: var(--input-text);
+    			border: 1px solid var(--input-border);
 			}
 
 			#prompt-input:focus {
 				border-color: #007aff;
+			}
+
+			#prompt-input::placeholder {
+				color: var(--input-placeholder);
 			}
 
 			#send-btn {
@@ -203,9 +259,23 @@
 				height: 16px;
 				fill: white;
 			}
+
+			::-webkit-scrollbar {
+				width: 8px;
+			}
+
+			::-webkit-scrollbar-track {
+				background: var(--scroll-track);
+			}
+
+			::-webkit-scrollbar-thumb {
+				background-color: var(--scroll-thumb);
+				border-radius: 10px;
+			}
 		</style>
 	</head>
 	<body>
+		<div id="theme-toggle" title="Toggle theme">🌙</div>
 		<div id="chat-container">
 			<div class="message agent-message">
 				Привет! Я Sirius Agent. Чем могу помочь в браузере?

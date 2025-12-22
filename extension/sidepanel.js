@@ -1,4 +1,24 @@
 document.addEventListener("DOMContentLoaded", () => {
+	const themeToggle = document.getElementById("theme-toggle");
+
+	// загрузка сохранённой темы
+	const savedTheme = localStorage.getItem("theme");
+	if (savedTheme === "dark") {
+		document.body.classList.add("dark");
+		themeToggle.textContent = "☀️";
+	} else {
+		themeToggle.textContent = "🌙";
+	}
+
+	// переключатель
+	themeToggle.addEventListener("click", () => {
+		document.body.classList.toggle("dark");
+		const isDark = document.body.classList.contains("dark");
+
+		localStorage.setItem("theme", isDark ? "dark" : "light");
+		themeToggle.textContent = isDark ? "☀️" : "🌙";
+	});
+	
 	const chatContainer = document.getElementById("chat-container");
 	const promptInput = document.getElementById("prompt-input");
 	const sendBtn = document.getElementById("send-btn");
