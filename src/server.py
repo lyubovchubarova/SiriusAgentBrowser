@@ -60,6 +60,8 @@ app.add_middleware(
 
 # Global log queue for streaming
 log_queue: queue.Queue[str] = queue.Queue()
+# Global input queue for user answers
+input_queue: queue.Queue[str] = queue.Queue()
 
 
 class AgentWorker(threading.Thread):
@@ -105,11 +107,28 @@ class AgentWorker(threading.Thread):
                         # Send to global log queue for /stream endpoint
                         log_queue.put(json.dumps({"type": "token", "content": token}))
 
+                    def on_user_input(question: str) -> str:
+                        import json
+                        logger.info(f"Requesting user input: {question}")
+                        # Send question to client
+                        log_queue.put(json.dumps({"type": "question", "content": question}))
+                        
+                        # Wait for answer
+                        # Clear queue first to avoid stale answers?
+                        # while not input_queue.empty():
+                        #     input_queue.get()
+                        
+                        # Block until answer received
+                        answer = input_queue.get()
+                        logger.info(f"Received user answer: {answer}")
+                        return answer
+
                     result = self.orchestrator.process_request(
                         query,
                         chat_history,
                         status_callback=on_status,
                         stream_callback=on_token,
+                        user_input_callback=on_user_input,
                     )
                     result_queue.put({"status": "success", "result": result})
                 else:
@@ -195,6 +214,10 @@ class ChatRequest(BaseModel):
     chat_history: list[dict[str, str]] | None = None
 
 
+class AnswerRequest(BaseModel):
+    text: str
+
+
 # Allow CORS for Chrome Extension
 app.add_middleware(
     CORSMiddleware,
@@ -203,6 +226,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.post("/answer")
+async def receive_answer(request: AnswerRequest) -> dict[str, str]:
+    """Endpoint to receive user answer."""
+    logger.info(f"Received answer via API: {request.text}")
+    input_queue.put(request.text)
+    return {"status": "ok"}
 
 
 @app.get("/health")

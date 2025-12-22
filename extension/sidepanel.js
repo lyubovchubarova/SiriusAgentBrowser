@@ -181,7 +181,8 @@ document.addEventListener("DOMContentLoaded", () => {
 			if (data.status === "success") {
 				addMessage(data.result, "agent");
 			} else {
-				addMessage(`Ошибка: ${data.message}`, "agent");
+				const errorMsg = data.message || data.detail || "Unknown error";
+				addMessage(`Ошибка: ${errorMsg}`, "agent");
 			}
 		} catch (error) {
 			const status = document.getElementById("current-status");

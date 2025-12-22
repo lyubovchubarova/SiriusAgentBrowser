@@ -19,7 +19,7 @@ Format the JSON with indentation (2 or 4 spaces) for readability.
 Hard constraints:
 - steps length MUST be <= 10. If task is complex, merge steps.
 - step_id must start from 1 and increase by 1 without gaps.
-- action must be exactly one of: navigate, click, type, scroll, extract, hover, inspect, wait, finish, search, solve_captcha.
+- action must be exactly one of: navigate, click, type, scroll, extract, hover, inspect, wait, finish, search, solve_captcha, ask_user.
 - description: short, clear, imperative.
   - For 'search', provide ONLY the optimal search keywords (e.g., "python documentation"). Do NOT include system words like "search for", "find", "look up".
   - For 'navigate', MUST include the full URL.
@@ -28,6 +28,7 @@ Hard constraints:
   - For 'inspect', describe what element or section you want to analyze (e.g., "Inspect the main article content").
   - For 'wait', describe what you are waiting for (e.g., "Wait for the results to load").
   - For 'solve_captcha', describe what kind of captcha you see (e.g., "Solve the Cloudflare challenge").
+  - For 'ask_user', describe the question you want to ask the user (e.g., "Please enter the 2FA code sent to your phone", "What is your login username?").
   - For 'finish', describe why the task is complete. If the task was just to find/open a page, use this action as soon as the page is loaded.
 - expected_result: concrete visible outcome.
 - estimated_time: integer seconds.
@@ -142,8 +143,16 @@ Return ONLY one word: "agent" or "chat".
 """.strip()
 
         try:
+            model_to_use = self.model
+            if self.provider == "yandex":
+                # Construct proper YandexGPT model URI
+                if self.model_path.startswith("gpt://"):
+                    model_to_use = self.model_path
+                else:
+                    model_to_use = f"gpt://{self.folder}/{self.model_path}"
+
             response = self.client.chat.completions.create(
-                model=self.model,
+                model=model_to_use,
                 messages=cast("Any", [{"role": "user", "content": prompt}]),
                 temperature=0.0,
             )
@@ -168,12 +177,20 @@ Return ONLY one word: "agent" or "chat".
             {"role": "user", "content": user_prompt},
         ]
 
+        # Determine model to use
+        model_to_use = self.model
+        if self.provider == "yandex":
+             if self.model_path.startswith("gpt://"):
+                model_to_use = self.model_path
+             else:
+                model_to_use = f"gpt://{self.folder}/{self.model_path}"
+
         try:
             if stream_callback:
                 stream = cast(
                     "Any",
                     self.client.chat.completions.create(
-                        model=self.model,
+                        model=model_to_use,
                         messages=cast("Any", messages),
                         stream=True,
                     ),
@@ -187,7 +204,7 @@ Return ONLY one word: "agent" or "chat".
                 return full_response
             else:
                 response = self.client.chat.completions.create(
-                    model=self.model,
+                    model=model_to_use,
                     messages=cast("Any", messages),
                 )
                 return response.choices[0].message.content or ""
@@ -232,8 +249,12 @@ Return ONLY one word: "agent" or "chat".
             # Use standard OpenAI-compatible API for Yandex
             print("\n[PLANNER LOG] Sending request to LLM (Streamed)...")
 
+            model_to_use = self.model_path
+            if not model_to_use.startswith("gpt://"):
+                model_to_use = f"gpt://{self.folder}/{self.model_path}"
+
             kwargs = {
-                "model": f"gpt://{self.folder}/{self.model_path}",
+                "model": model_to_use,
                 "messages": [
                     {"role": "system", "content": sys_prompt},
                     {"role": "user", "content": user_content},

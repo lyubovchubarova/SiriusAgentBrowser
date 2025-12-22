@@ -55,6 +55,7 @@ class Orchestrator:
         chat_history: list[dict[str, str]] | None = None,
         status_callback: Any = None,
         stream_callback: Any = None,
+        user_input_callback: Any = None,
     ) -> str:
         """
         Обрабатывает пользовательский запрос.
@@ -183,7 +184,28 @@ class Orchestrator:
                 logger.info(f"Step {step.step_id}: {step.description}")
 
                 # Execute
-                if step.action == "search":
+                if step.action == "ask_user":
+                    logger.info(f"Asking user: {step.description}")
+                    report_status(f"Waiting for user input: {step.description}")
+                    
+                    if user_input_callback:
+                        try:
+                            user_answer = user_input_callback(step.description)
+                        except Exception as e:
+                            logger.error(f"Error getting user input: {e}")
+                            user_answer = "Error: Could not get user input."
+                    else:
+                        # Fallback to console input
+                        print(f"\n[AGENT QUESTION] {step.description}")
+                        try:
+                            user_answer = input("Your answer: ")
+                        except EOFError:
+                            user_answer = "No answer provided."
+                    
+                    result = f"User answered: {user_answer}"
+                    logger.info(f"User answer received: {user_answer}")
+
+                elif step.action == "search":
                     logger.info(f"Executing Search: {step.description}")
                     # User prefers using the address bar for searching instead of API
                     # This mimics a user typing in the address bar
