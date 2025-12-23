@@ -91,6 +91,14 @@ class AgentWorker(threading.Thread):
                 break  # Stop signal
 
             query, chat_history, result_queue = item
+
+            # Clear input queue from stale messages
+            while not input_queue.empty():
+                try:
+                    input_queue.get_nowait()
+                except queue.Empty:
+                    break
+
             try:
                 logger.info(f"Worker processing query: {query}")
                 if self.orchestrator:
@@ -116,15 +124,24 @@ class AgentWorker(threading.Thread):
                             json.dumps({"type": "question", "content": question})
                         )
 
-                        # Wait for answer
-                        # Clear queue first to avoid stale answers?
-                        # while not input_queue.empty():
-                        #     input_queue.get()
-
                         # Block until answer received
-                        answer = input_queue.get()
-                        logger.info(f"Received user answer: {answer}")
-                        return answer
+                        while True:
+                            answer = input_queue.get()
+                            if answer == "__STOP__":
+                                if (
+                                    self.orchestrator
+                                    and self.orchestrator._stop_requested
+                                ):
+                                    logger.info(
+                                        "User input interrupted by stop signal."
+                                    )
+                                    return "STOPPED"
+                                else:
+                                    # Stale stop signal, ignore
+                                    continue
+
+                            logger.info(f"Received user answer: {answer}")
+                            return answer
 
                     result = self.orchestrator.process_request(
                         query,
@@ -149,10 +166,15 @@ class AgentWorker(threading.Thread):
         provider = os.getenv("LLM_PROVIDER", "yandex")
         model = os.getenv("LLM_MODEL", "gpt-4o")
         cdp_url = os.getenv("CDP_URL")  # Default to None to launch internal browser
-        headless = False
-        # headless = os.getenv("HEADLESS", "false").lower() == "true"
+        # Force headless=False for local debugging if not specified
+        headless_env = os.getenv("HEADLESS", "false").lower()
+        headless = headless_env == "true"
 
-        logger.info("Initializing Orchestrator in worker thread...")
+        # If running locally (no CDP_URL) and headless is not explicitly true, default to false
+        if not cdp_url and headless_env == "false":
+            headless = False
+
+        logger.info(f"Initializing Orchestrator (Headless: {headless})...")
 
         # Retry logic for browser connection
         max_retries = 5
@@ -176,24 +198,31 @@ class AgentWorker(threading.Thread):
                 time.sleep(1)
 
         # Extension polling
-        logger.info("Waiting for 'Sirius Agent Browser' extension...")
-        while True:
-            if (
-                self.orchestrator
-                and self.orchestrator.browser_controller.is_extension_installed(
-                    "Sirius Agent Browser"
-                )
-            ):
-                logger.info("✅ Extension 'Sirius Agent Browser' detected.")
-                break
+        # Only wait for extension if we are connecting to an external browser (CDP)
+        # If we launched the browser ourselves, we assume the extension is loaded via args.
+        if cdp_url:
+            logger.info("Waiting for 'Sirius Agent Browser' extension...")
+            while True:
+                if (
+                    self.orchestrator
+                    and self.orchestrator.browser_controller.is_extension_installed(
+                        "Sirius Agent Browser"
+                    )
+                ):
+                    logger.info("✅ Extension 'Sirius Agent Browser' detected.")
+                    break
 
-            # Allow stopping initialization
-            if self.orchestrator and self.orchestrator._stop_requested:
-                logger.info("Initialization interrupted by user stop request.")
-                break
+                # Allow stopping initialization
+                if self.orchestrator and self.orchestrator._stop_requested:
+                    logger.info("Initialization interrupted by user stop request.")
+                    break
 
-            # logger.info("Waiting for extension... (Open Side Panel to wake it up)")
-            time.sleep(0.5)
+                # logger.info("Waiting for extension... (Open Side Panel to wake it up)")
+                time.sleep(0.5)
+        else:
+            logger.info(
+                "Browser launched locally. Skipping extension check (assumed installed via args)."
+            )
 
     def process_query(
         self, query: str, chat_history: list[dict[str, str]] | None = None
@@ -208,6 +237,8 @@ class AgentWorker(threading.Thread):
     def stop_current_task(self) -> None:
         if self.orchestrator:
             self.orchestrator.stop()
+        # Unblock any potential user input wait
+        input_queue.put("__STOP__")
 
 
 # Global worker instance

@@ -143,23 +143,56 @@ class BrowserController:
             if browser_type is None:
                 raise ValueError(f"Unknown browser_name: {self.options.browser_name}")
 
-            self._browser = browser_type.launch(
+            # Load extension if path exists
+            extension_path = Path("extension").resolve()
+            args = [
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-infobars",
+                "--disable-dev-shm-usage",
+                "--disable-browser-side-navigation",
+                "--disable-gpu",
+            ]
+
+            if extension_path.exists():
+                print(f"Loading extension from: {extension_path}")
+                args.extend(
+                    [
+                        f"--disable-extensions-except={extension_path}",
+                        f"--load-extension={extension_path}",
+                    ]
+                )
+                # Extensions in headless mode require new headless mode
+                if self.options.headless:
+                    args.append("--headless=new")
+
+            self._context = self._pw.chromium.launch_persistent_context(
+                user_data_dir="temp/user_data",
                 headless=self.options.headless,
                 slow_mo=self.options.slow_mo_ms,
-                args=[
-                    "--disable-blink-features=AutomationControlled",
-                    "--no-sandbox",
-                    "--disable-infobars",
-                    "--disable-dev-shm-usage",
-                    "--disable-browser-side-navigation",
-                    "--disable-gpu",
-                ],
-            )
-
-            self._context = self._browser.new_context(
+                args=args,
                 viewport=self.options.viewport,
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             )
+            self._browser = self._context.browser
+
+            # self._browser = browser_type.launch(
+            #     headless=self.options.headless,
+            #     slow_mo=self.options.slow_mo_ms,
+            #     args=[
+            #         "--disable-blink-features=AutomationControlled",
+            #         "--no-sandbox",
+            #         "--disable-infobars",
+            #         "--disable-dev-shm-usage",
+            #         "--disable-browser-side-navigation",
+            #         "--disable-gpu",
+            #     ],
+            # )
+
+            # self._context = self._browser.new_context(
+            #     viewport=self.options.viewport,
+            #     user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            # )
 
         # Inject cursor visualization
         js_cursor = """
@@ -231,6 +264,13 @@ class BrowserController:
 
         # Try to use an existing page instead of opening a new blank one
         if self._context.pages:
+            print(f"DEBUG: Found {len(self._context.pages)} pages in context.")
+            for i, p in enumerate(self._context.pages):
+                try:
+                    print(f"  Page {i}: {p.url} ('{p.title()}')")
+                except Exception:
+                    print(f"  Page {i}: <error getting details>")
+
             # Filter out extension pages (background pages, side panels, etc.)
             # They usually have 'chrome-extension://' scheme
             valid_pages = [
@@ -244,6 +284,10 @@ class BrowserController:
                 # Use the most recently active VALID page
                 self._page = valid_pages[-1]
                 print(f"Attached to existing page: {self._page.url}")
+                try:
+                    self._page.bring_to_front()
+                except Exception as e:
+                    print(f"Could not bring page to front: {e}")
             else:
                 # If only extension pages exist, create a new normal page
                 print("Only extension pages found. Creating new page.")
