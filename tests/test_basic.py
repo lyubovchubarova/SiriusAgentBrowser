@@ -5,15 +5,20 @@ import subprocess
 import openai
 import dotenv
 import os
+from tqdm import tqdm
 
 dotenv.load_dotenv()
 YANDEX_CLOUD_FOLDER = os.getenv("YANDEX_CLOUD_FOLDER")
 YANDEX_CLOUD_API_KEY = os.getenv("YANDEX_CLOUD_API_KEY")
-YANDEX_CLOUD_MODEL = os.getenv("YANDEX_CLOUD_MODEL_PATH")
+YANDEX_CLOUD_MODEL = "qwen3-235b-a22b-fp8/latest"
 
 
 def request(prompt):
-    subprocess.run(shlex.split(f'venv/Scripts/python src/main.py "{prompt}"'))
+    subprocess.run(
+        shlex.split(f'venv/Scripts/python src/main.py "{prompt}"'),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
     db = "logs.db"
     q1 = "SELECT session_id FROM action_logs ORDER BY id DESC LIMIT 1"
     q2 = "SELECT component, action_type, message, details FROM action_logs WHERE session_id = ?"
@@ -45,7 +50,7 @@ def judge(response):
     )
 
     response = client.responses.create(
-        model=f"gpt://{YANDEX_CLOUD_FOLDER}/yandexgpt/rc",
+        model=f"gpt://{YANDEX_CLOUD_FOLDER}/{YANDEX_CLOUD_MODEL}",
         temperature=0.3,
         instructions=system_prompt,
         input=response,
@@ -53,6 +58,40 @@ def judge(response):
     return response.output_text
 
 
+from tqdm import tqdm
+import json
+
+
+def test_prompts():
+    with open("tests/test_requests.json", "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    succes = 0
+    total = len(data)
+
+    bar = tqdm(total=total, desc="Tests", unit="req")
+
+    for idx, obj in enumerate(data, 1):
+        open("tests/result.json", "w", encoding="utf8").write(
+            request(obj["query"])
+        )
+        open("tests/judge_answer.json", "w", encoding="utf8").write(
+            judge(open("tests/result.json", "r", encoding="utf8").read())
+        )
+        with open("tests/judge_answer.json", "r", encoding="utf-8") as f:
+            answer = json.load(f)
+
+        if answer.get("result") == "OK":
+            succes += 1
+
+        # обновляем прогресс бар
+        pct_succes = succes / idx * 100
+        bar.set_postfix({"success_pct": f"{pct_succes:.2f}%"})
+        bar.update(1)
+
+    bar.close()
+    print(f"Итог: {succes}/{total} успешных ({succes / total * 100:.2f}%)")
+
+
 if __name__ == "__main__":
-    open("tests/result.json", "w", encoding="utf8").write(request("погода во владивостоке сейчас"))
-    open("tests/judge_answer.json", "w", encoding="utf8").write(judge(open("tests/result.json", "r", encoding="utf8").read()))
+    test_prompts()
