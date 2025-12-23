@@ -1,488 +1,488 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html>
-<head>
-<meta charset="UTF-8" />
-<title>Sirius Agent</title>
-<style>
-:root {
---input-bg: #ffffff;
-    --input-border: #dcdcdc;
-    --input-text: #1f1f1f;
-    --input-placeholder: #8a8a8a;
-    --user-text: #ffffff;
---bg-main: #f5f5f5;
---bg-panel: #ffffff;
---text-main: #333;
---agent-bg: #ffffff;
---user-bg: #007aff;
---thinking-bg: #e8e8e8;
---border-color: #e0e0e0;
---thinking-bg: #e8e8e8;
---thinking-header-bg: #dcdcdc;
---thinking-border: #d0d0d0;
---thinking-text: #333;
---scroll-track: #f0f0f0;
-    --scroll-thumb: #c0c0c0;
-}
+	<head>
+		<meta charset="UTF-8" />
+		<title>Sirius Agent</title>
+		<style>
+			:root {
+				--input-bg: #ffffff;
+    			--input-border: #dcdcdc;
+    			--input-text: #1f1f1f;
+    			--input-placeholder: #8a8a8a;
+    			--user-text: #ffffff;
+				--bg-main: #f5f5f5;
+				--bg-panel: #ffffff;
+				--text-main: #333;
+				--agent-bg: #ffffff;
+				--user-bg: #007aff;
+				--thinking-bg: #e8e8e8;
+				--border-color: #e0e0e0;
+				--thinking-bg: #e8e8e8;
+				--thinking-header-bg: #dcdcdc;
+				--thinking-border: #d0d0d0;
+				--thinking-text: #333;
+				--scroll-track: #f0f0f0;
+    			--scroll-thumb: #c0c0c0;
+			}
 
-/* --- ТЕМЫ --- */
+			/* --- ТЕМЫ --- */
 
-/* DARK */
-[data-theme="dark"] {
---bg-main: #1e1e1e;
---bg-panel: #2a2a2a;
---text-main: #e0e0e0;
---agent-bg: #2f2f31;
---user-bg: #0a84ff;
-}
+			/* DARK */
+			[data-theme="dark"] {
+				--bg-main: #1e1e1e;
+				--bg-panel: #2a2a2a;
+				--text-main: #e0e0e0;
+				--agent-bg: #2f2f31;
+				--user-bg: #0a84ff;
+			}
 
-/* НОВЫЙ ГОД (Красно-зеленая гамма) */
-[data-theme="new-year"] {
---bg-main: #0a2e1c; /* Глубокий зеленый */
---bg-panel: #14452f;
---text-main: #fff;
---agent-bg: #1d5c41;
---user-bg: #c41e3a; /* Рождественский красный */
---border-color: #2a7a5a;
-}
+			/* НОВЫЙ ГОД (Красно-зеленая гамма) */
+			[data-theme="new-year"] {
+				--bg-main: #0a2e1c; /* Глубокий зеленый */
+				--bg-panel: #14452f;
+				--text-main: #fff;
+				--agent-bg: #1d5c41;
+				--user-bg: #c41e3a; /* Рождественский красный */
+				--border-color: #2a7a5a;
+			}
 
-/* 8 МАРТА (Нежно-розовая гамма) */
-[data-theme="march-8"] {
---bg-main: #fff0f5; 
---bg-panel: #ffffff;
---text-main: #5d3f4a;
---agent-bg: #ffe4e1;
---user-bg: #ff69b4;
---border-color: #ffc0cb;
-}
+			/* 8 МАРТА (Нежно-розовая гамма) */
+			[data-theme="march-8"] {
+				--bg-main: #fff0f5; 
+				--bg-panel: #ffffff;
+				--text-main: #5d3f4a;
+				--agent-bg: #ffe4e1;
+				--user-bg: #ff69b4;
+				--border-color: #ffc0cb;
+			}
 
-/* 23 ФЕВРАЛЯ (Милитари/Синий стиль) */
-[data-theme="feb-23"] {
---bg-main: #2b302a;
---bg-panel: #3c443b;
---text-main: #e8e8e8;
---agent-bg: #4a5448;
---user-bg: #556b2f;
---border-color: #6b8e23;
-}
+			/* 23 ФЕВРАЛЯ (Милитари/Синий стиль) */
+			[data-theme="feb-23"] {
+				--bg-main: #2b302a;
+				--bg-panel: #3c443b;
+				--text-main: #e8e8e8;
+				--agent-bg: #4a5448;
+				--user-bg: #556b2f;
+				--border-color: #6b8e23;
+			}
 
-/* --- СТИЛИ МЕНЮ --- */
-.theme-menu-container {
-position: relative;
-display: flex;
-flex-direction: row-reverse; /* Меню будет раскрываться влево от кнопки */
-align-items: center;
-}
+			/* --- СТИЛИ МЕНЮ --- */
+			.theme-menu-container {
+				position: relative;
+				display: flex;
+				flex-direction: row-reverse; /* Меню будет раскрываться влево от кнопки */
+				align-items: center;
+			}
 
-.theme-options {
-display: none; /* Скрыто по умолчанию */
-background: var(--bg-panel);
-border: 1px solid var(--border-color);
-padding: 5px;
-border-radius: 25px;
-margin-right: 10px;
-gap: 5px;
-box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-animation: slideIn 0.2s ease;
-}
+			.theme-options {
+				display: none; /* Скрыто по умолчанию */
+				background: var(--bg-panel);
+				border: 1px solid var(--border-color);
+				padding: 5px;
+				border-radius: 25px;
+				margin-right: 10px;
+				gap: 5px;
+				box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+				animation: slideIn 0.2s ease;
+			}
 
-.theme-options.active {
-display: flex;
-}
+			.theme-options.active {
+				display: flex;
+			}
 
-.theme-opt {
-all: unset;
-cursor: pointer;
-font-size: 18px;
-width: 32px;
-height: 32px;
-display: flex;
-align-items: center;
-justify-content: center;
-border-radius: 50%;
-transition: background 0.2s;
-}
+			.theme-opt {
+				all: unset;
+				cursor: pointer;
+				font-size: 18px;
+				width: 32px;
+				height: 32px;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				border-radius: 50%;
+				transition: background 0.2s;
+			}
 
-.theme-opt:hover {
-background: rgba(0,0,0,0.1);
-}
+			.theme-opt:hover {
+				background: rgba(0,0,0,0.1);
+			}
 
-@keyframes slideIn {
-from { opacity: 0; transform: translateX(20px); }
-to { opacity: 1; transform: translateX(0); }
-}
+			@keyframes slideIn {
+				from { opacity: 0; transform: translateX(20px); }
+				to { opacity: 1; transform: translateX(0); }
+			}
 
-body {
-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
-Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans",
-"Helvetica Neue", sans-serif;
-margin: 0;
-padding: 0;
-display: flex;
-flex-direction: column;
-height: 100vh;
-background-color: var(--bg-main);
-    color: var(--text-main);
-transition: background-color 0.3s ease, color 0.3s ease;
-}
+			body {
+				font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+					Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans",
+					"Helvetica Neue", sans-serif;
+				margin: 0;
+				padding: 0;
+				display: flex;
+				flex-direction: column;
+				height: 100vh;
+				background-color: var(--bg-main);
+    			color: var(--text-main);
+				transition: background-color 0.3s ease, color 0.3s ease;
+			}
 
-#chat-container {
-flex: 1;
-overflow-y: auto;
-padding: 15px;
-display: flex;
-flex-direction: column;
-gap: 10px;
-/* Добавляем внутренний отступ сверху, чтобы создать место для кнопок */
-padding-top: 60px;
-}
+			#chat-container {
+				flex: 1;
+				overflow-y: auto;
+				padding: 15px;
+				display: flex;
+				flex-direction: column;
+				gap: 10px;
+				/* Добавляем внутренний отступ сверху, чтобы создать место для кнопок */
+				padding-top: 60px;
+			}
 
-.message {
-max-width: 85%;
-padding: 10px 15px;
-border-radius: 15px;
-line-height: 1.4;
-font-size: 14px;
-word-wrap: break-word;
-}
+			.message {
+				max-width: 85%;
+				padding: 10px 15px;
+				border-radius: 15px;
+				line-height: 1.4;
+				font-size: 14px;
+				word-wrap: break-word;
+			}
 
-.user-message {
-align-self: flex-end;
-background-color: var(--user-bg);
-color: var(--user-text);
-border-bottom-right-radius: 5px;
-}
+			.user-message {
+				align-self: flex-end;
+				background-color: var(--user-bg);
+				color: var(--user-text);
+				border-bottom-right-radius: 5px;
+			}
 
-.agent-message {
-align-self: flex-start;
-border-bottom-left-radius: 5px;
-box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-background-color: var(--agent-bg);
-    color: var(--text-main);
-}
+			.agent-message {
+				align-self: flex-start;
+				border-bottom-left-radius: 5px;
+				box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+				background-color: var(--agent-bg);
+    			color: var(--text-main);
+			}
 
-.thinking-container {
-align-self: flex-start;
-border-radius: 8px;
-margin-bottom: 8px;
-max-width: 95%;
-overflow: hidden;
-display: flex;
-flex-direction: column;
-box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-animation: fadeIn 0.3s ease-out;
-background-color: var(--thinking-bg);
-    border: 1px solid var(--thinking-border);
-}
+			.thinking-container {
+				align-self: flex-start;
+				border-radius: 8px;
+				margin-bottom: 8px;
+				max-width: 95%;
+				overflow: hidden;
+				display: flex;
+				flex-direction: column;
+				box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+				animation: fadeIn 0.3s ease-out;
+				background-color: var(--thinking-bg);
+    			border: 1px solid var(--thinking-border);
+			}
 
-@keyframes fadeIn {
-from {
-opacity: 0;
-transform: translateY(5px);
-}
-to {
-opacity: 1;
-transform: translateY(0);
-}
-}
+			@keyframes fadeIn {
+				from {
+					opacity: 0;
+					transform: translateY(5px);
+				}
+				to {
+					opacity: 1;
+					transform: translateY(0);
+				}
+			}
 
-.thinking-header {
-padding: 6px 10px;
-cursor: pointer;
-display: flex;
-justify-content: space-between;
-align-items: center;
-font-size: 11px;
-font-weight: 600;
-user-select: none;
-transition: background-color 0.2s;
-    color: var(--thinking-text);
-background-color: var(--thinking-header-bg);
-}
+			.thinking-header {
+				padding: 6px 10px;
+				cursor: pointer;
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				font-size: 11px;
+				font-weight: 600;
+				user-select: none;
+				transition: background-color 0.2s;
+    			color: var(--thinking-text);
+				background-color: var(--thinking-header-bg);
+			}
 
-.thinking-header:hover {
-background-color: rgba(255, 255, 255, 0.05);
-}
+			.thinking-header:hover {
+				background-color: rgba(255, 255, 255, 0.05);
+			}
 
-.thinking-content {
-padding: 10px;
-font-family: "Consolas", "Monaco", "Courier New", monospace;
-font-size: 11px;
-line-height: 1.4;
-white-space: pre-wrap;
-word-wrap: break-word;
-display: block;
-max-height: 300px;
-overflow-y: auto;
-background-color: var(--thinking-bg);
-    color: var(--thinking-text);
-}
+			.thinking-content {
+				padding: 10px;
+				font-family: "Consolas", "Monaco", "Courier New", monospace;
+				font-size: 11px;
+				line-height: 1.4;
+				white-space: pre-wrap;
+				word-wrap: break-word;
+				display: block;
+				max-height: 300px;
+				overflow-y: auto;
+				background-color: var(--thinking-bg);
+    			color: var(--thinking-text);
+			}
 
-.thinking-content.collapsed {
-display: none;
-}
+			.thinking-content.collapsed {
+				display: none;
+			}
 
-.thinking-content::after {
-content: "";
-display: inline-block;
-vertical-align: bottom;
-animation: blink 1s step-start infinite;
-margin-left: 2px;
-font-size: 10px;
-color: var(--thinking-text);
-    opacity: 0.6;
-}
+			.thinking-content::after {
+				content: "▋";
+				display: inline-block;
+				vertical-align: bottom;
+				animation: blink 1s step-start infinite;
+				margin-left: 2px;
+				font-size: 10px;
+				color: var(--thinking-text);
+    			opacity: 0.6;
+			}
 
-@keyframes blink {
-50% {
-opacity: 0;
-}
-}
+			@keyframes blink {
+				50% {
+					opacity: 0;
+				}
+			}
 
-.toggle-icon {
-transition: transform 0.2s;
-font-size: 10px;
-}
+			.toggle-icon {
+				transition: transform 0.2s;
+				font-size: 10px;
+			}
 
-.status-message {
-align-self: center;
-font-size: 12px;
-color: #888;
-margin: 5px 0;
-}
+			.status-message {
+				align-self: center;
+				font-size: 12px;
+				color: #888;
+				margin: 5px 0;
+			}
 
-#input-area {
-padding: 15px;
-display: flex;
-gap: 10px;
-background-color: var(--bg-panel);
-    border-top: 1px solid var(--border-color);
-}
+			#input-area {
+				padding: 15px;
+				display: flex;
+				gap: 10px;
+				background-color: var(--bg-panel);
+    			border-top: 1px solid var(--border-color);
+			}
 
-#prompt-input {
-flex: 1;
-padding: 10px;
-border-radius: 20px;
-outline: none;
-font-size: 14px;
-background-color: var(--input-bg);
-    color: var(--input-text);
-    border: 1px solid var(--input-border);
-}
+			#prompt-input {
+				flex: 1;
+				padding: 10px;
+				border-radius: 20px;
+				outline: none;
+				font-size: 14px;
+				background-color: var(--input-bg);
+    			color: var(--input-text);
+    			border: 1px solid var(--input-border);
+			}
 
-#prompt-input:focus {
-border-color: #007aff;
-}
+			#prompt-input:focus {
+				border-color: #007aff;
+			}
 
-#prompt-input::placeholder {
-color: var(--input-placeholder);
-}
+			#prompt-input::placeholder {
+				color: var(--input-placeholder);
+			}
 
-#send-btn {
-background-color: #007aff;
-color: white;
-border: none;
-border-radius: 50%;
-width: 36px;
-height: 36px;
-cursor: pointer;
-display: flex;
-align-items: center;
-justify-content: center;
-}
+			#send-btn {
+				background-color: #007aff;
+				color: white;
+				border: none;
+				border-radius: 50%;
+				width: 36px;
+				height: 36px;
+				cursor: pointer;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+			}
 
-#send-btn:disabled {
-background-color: #ccc;
-cursor: not-allowed;
-}
+			#send-btn:disabled {
+				background-color: #ccc;
+				cursor: not-allowed;
+			}
 
-#stop-btn {
-background-color: #ff3b30;
-color: white;
-border: none;
-border-radius: 50%;
-width: 36px;
-height: 36px;
-cursor: pointer;
-display: none; /* Hidden by default */
-align-items: center;
-justify-content: center;
-}
+			#stop-btn {
+				background-color: #ff3b30;
+				color: white;
+				border: none;
+				border-radius: 50%;
+				width: 36px;
+				height: 36px;
+				cursor: pointer;
+				display: none; /* Hidden by default */
+				align-items: center;
+				justify-content: center;
+			}
 
-#stop-btn svg {
-width: 16px;
-height: 16px;
-fill: white;
-}
+			#stop-btn svg {
+				width: 16px;
+				height: 16px;
+				fill: white;
+			}
 
-#send-btn svg {
-width: 16px;
-height: 16px;
-fill: white;
-}
+			#send-btn svg {
+				width: 16px;
+				height: 16px;
+				fill: white;
+			}
 
-#mic-btn {
-background-color: transparent; /* Или var(--input-bg) если хотите фон */
-color: #007aff;
-border: 1px solid var(--border-color); /* Опционально, можно убрать */
-border: none;
-border-radius: 50%;
-width: 36px;
-height: 36px;
-cursor: pointer;
-display: flex;
-align-items: center;
-justify-content: center;
-margin-right: 5px; /* Отступ от инпута */
-transition: all 0.2s;
-}
+			#mic-btn {
+				background-color: transparent; /* Или var(--input-bg) если хотите фон */
+				color: #007aff;
+				border: 1px solid var(--border-color); /* Опционально, можно убрать */
+				border: none;
+				border-radius: 50%;
+				width: 36px;
+				height: 36px;
+				cursor: pointer;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				margin-right: 5px; /* Отступ от инпута */
+				transition: all 0.2s;
+			}
 
-#mic-btn svg {
-width: 20px;
-height: 20px;
-fill: #8a8a8a; /* Цвет иконки в покое */
-}
+			#mic-btn svg {
+				width: 20px;
+				height: 20px;
+				fill: #8a8a8a; /* Цвет иконки в покое */
+			}
 
-#mic-btn:hover svg {
-fill: #007aff;
-}
+			#mic-btn:hover svg {
+				fill: #007aff;
+			}
 
-/* Стиль, когда микрофон активен (слушает) */
-#mic-btn.listening {
-background-color: #ff3b30;
-animation: pulse 1.5s infinite;
-}
+			/* Стиль, когда микрофон активен (слушает) */
+			#mic-btn.listening {
+				background-color: #ff3b30;
+				animation: pulse 1.5s infinite;
+			}
 
-#mic-btn.listening svg {
-fill: white;
-}
+			#mic-btn.listening svg {
+				fill: white;
+			}
 
-@keyframes pulse {
-0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7); }
-70% { transform: scale(1.1); box-shadow: 0 0 0 6px rgba(255, 59, 48, 0); }
-100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 59, 48, 0); }
-}
+			@keyframes pulse {
+				0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7); }
+				70% { transform: scale(1.1); box-shadow: 0 0 0 6px rgba(255, 59, 48, 0); }
+				100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 59, 48, 0); }
+			}
+			
+			::-webkit-scrollbar {
+				width: 8px;
+			}
 
-::-webkit-scrollbar {
-width: 8px;
-}
+			::-webkit-scrollbar-track {
+				background: var(--scroll-track);
+			}
 
-::-webkit-scrollbar-track {
-background: var(--scroll-track);
-}
+			::-webkit-scrollbar-thumb {
+				background-color: var(--scroll-thumb);
+				border-radius: 10px;
+			}
 
-::-webkit-scrollbar-thumb {
-background-color: var(--scroll-thumb);
-border-radius: 10px;
-}
+			/* Контейнер-родитель: теперь он управляет расположением */
+			.top-controls {
+				position: absolute;
+				top: 12px;
+				right: 12px;
+				display: flex !important;
+				gap: 10px;
+				z-index: 9999;
+				/* Добавим полупрозрачный фон под кнопками (опционально), 
+				чтобы они лучше читались на фоне текста при скролле */
+				padding: 5px;
+				border-radius: 20px;
+			}
 
-/* Контейнер-родитель: теперь он управляет расположением */
-.top-controls {
-position: absolute;
-top: 12px;
-right: 12px;
-display: flex !important;
-gap: 10px;
-z-index: 9999;
-/* Добавим полупрозрачный фон под кнопками (опционально), 
-чтобы они лучше читались на фоне текста при скролле */
-padding: 5px;
-border-radius: 20px;
-}
+			/* Сами кнопки */
+			.icon-button {
+				all: unset; /* Сброс стандартных стилей */
+				background-color: #208cff;
+				color: white;
+				width: 34px;
+				height: 34px;
+				border-radius: 50%;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				cursor: pointer;
+				font-size: 16px;
+				transition: transform 0.1s, background-color 0.2s;
+				box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+				/* Убеждаемся, что нет абсолютного позиционирования здесь */
+				position: relative !important; 
+			}
 
-/* Сами кнопки */
-.icon-button {
-all: unset; /* Сброс стандартных стилей */
-background-color: #208cff;
-color: white;
-width: 34px;
-height: 34px;
-border-radius: 50%;
-display: flex;
-align-items: center;
-justify-content: center;
-cursor: pointer;
-font-size: 16px;
-transition: transform 0.1s, background-color 0.2s;
-box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-/* Убеждаемся, что нет абсолютного позиционирования здесь */
-position: relative !important; 
-}
+			/* Эффект при наведении */
+			.icon-button:hover {
+				background-color: #0066d6;
+				transform: scale(1.05);
+			}
 
-/* Эффект при наведении */
-.icon-button:hover {
-background-color: #0066d6;
-transform: scale(1.05);
-}
+			.icon-button:active {
+				transform: translateY(0);
+			}
 
-.icon-button:active {
-transform: translateY(0);
-}
+			/* Чтобы кнопки не перекрывали текст сообщения */
+			.message.agent:first-child {
+				padding-right: 80px; /* Резервируем место под кнопки в первом сообщении */
+			}
+			
+			.message:first-child {
+				margin-top: 0;
+			}
 
-/* Чтобы кнопки не перекрывали текст сообщения */
-.message.agent:first-child {
-padding-right: 80px; /* Резервируем место под кнопки в первом сообщении */
-}
+			.message, #input-area, .thinking-container {
+				transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="top-controls">
+			<button id="mute-toggle" class="icon-button" title="Озвучка">🔊</button>
+			
+			<div class="theme-menu-container">
+				<button id="theme-menu-btn" class="icon-button" title="Выбрать тему">🎨</button>
+				<div id="theme-options" class="theme-options">
+					<button class="theme-opt" data-theme="light" title="Светлая">☀️</button>
+					<button class="theme-opt" data-theme="dark" title="Темная">🌙</button>
+					<button class="theme-opt" data-theme="new-year" title="Новый Год">🎄</button>
+					<button class="theme-opt" data-theme="march-8" title="8 Марта">🌸</button>
+					<button class="theme-opt" data-theme="feb-23" title="23 Февраля">🎖️</button>
+				</div>
+			</div>
+		</div>
+		<div id="chat-container">
+			<div class="message agent-message">
+				Привет! Я Sirius Agent. Чем могу помочь в браузере?
+			</div>
+		</div>
 
-.message:first-child {
-margin-top: 0;
-}
+		<div id="input-area">
+			<button id="mic-btn" title="Голосовой ввод">
+				<svg viewBox="0 0 24 24">
+					<path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 2.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+					<path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+				</svg>
+			</button>
 
-.message, #input-area, .thinking-container {
-transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
-}
-</style>
-</head>
-<body>
-<div class="top-controls">
-<button id="mute-toggle" class="icon-button" title="Озвучка"></button>
+			<input
+				type="text"
+				id="prompt-input"
+				placeholder="Введите задачу..."
+				autocomplete="off"
+			/>
+			
+			<button id="stop-btn" title="Остановить">
+				<svg viewBox="0 0 24 24">
+					<rect x="6" y="6" width="12" height="12"></rect>
+				</svg>
+			</button>
+			
+			<button id="send-btn">
+				<svg viewBox="0 0 24 24">
+					<path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
+				</svg>
+			</button>
+		</div>
 
-<div class="theme-menu-container">
-<button id="theme-menu-btn" class="icon-button" title="Выбрать тему"></button>
-<div id="theme-options" class="theme-options">
-<button class="theme-opt" data-theme="light" title="Светлая">☀️</button>
-<button class="theme-opt" data-theme="dark" title="Темная">🌙</button>
-<button class="theme-opt" data-theme="new-year" title="Новый Год"></button>
-<button class="theme-opt" data-theme="march-8" title="8 Марта"></button>
-<button class="theme-opt" data-theme="feb-23" title="23 Февраля"></button>
-</div>
-</div>
-</div>
-<div id="chat-container">
-<div class="message agent-message">
-Привет! Я Sirius Agent. Чем могу помочь в браузере?
-</div>
-</div>
-
-<div id="input-area">
-<button id="mic-btn" title="Голосовой ввод">
-<svg viewBox="0 0 24 24">
-<path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 2.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-<path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-</svg>
-</button>
-
-<input
-type="text"
-id="prompt-input"
-placeholder="Введите задачу..."
-autocomplete="off"
-/>
-
-<button id="stop-btn" title="Остановить">
-<svg viewBox="0 0 24 24">
-<rect x="6" y="6" width="12" height="12"></rect>
-</svg>
-</button>
-
-<button id="send-btn">
-<svg viewBox="0 0 24 24">
-<path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
-</svg>
-</button>
-</div>
-
-<script src="marked.min.js"></script>
-<script src="sidepanel.js"></script>
-</body>
+		<script src="marked.min.js"></script>
+		<script src="sidepanel.js"></script>
+	</body>
 </html>
