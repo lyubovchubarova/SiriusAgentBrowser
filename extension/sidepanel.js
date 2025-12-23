@@ -281,94 +281,112 @@ document.addEventListener("DOMContentLoaded", () => {
 	});
 
 	const micBtn = document.getElementById("mic-btn");
-    let recognition = null;
+	let recognition = null;
 
-    // Проверяем поддержку API
-    if ('webkitSpeechRecognition' in window) {
-        recognition = new webkitSpeechRecognition();
-        recognition.continuous = false; // Остановить запись после одной фразы
-        recognition.interimResults = true; // Показывать текст в процессе говорения
-        recognition.lang = 'ru-RU'; // Установите нужный язык
+	// Проверяем поддержку API
+	if ("webkitSpeechRecognition" in window) {
+		recognition = new webkitSpeechRecognition();
+		recognition.continuous = false; // Остановить запись после одной фразы
+		recognition.interimResults = true; // Показывать текст в процессе говорения
+		recognition.lang = "ru-RU"; // Установите нужный язык
 
-        recognition.onstart = () => {
-            micBtn.classList.add("listening");
-            promptInput.placeholder = "Говорите...";
-        };
+		recognition.onstart = () => {
+			console.log("Speech recognition started");
+			micBtn.classList.add("listening");
+			promptInput.placeholder = "Говорите...";
+		};
 
-        recognition.onend = () => {
-            micBtn.classList.remove("listening");
-            promptInput.placeholder = isConnected ? "Введите задачу..." : "Connecting...";
-            promptInput.focus();
-        };
+		recognition.onend = () => {
+			console.log("Speech recognition ended");
+			micBtn.classList.remove("listening");
+			promptInput.placeholder = isConnected
+				? "Введите задачу..."
+				: "Connecting...";
+			promptInput.focus();
+		};
 
 		recognition.onresult = (event) => {
-            let interimTranscript = '';
-            let finalTranscript = '';
+			let interimTranscript = "";
+			let finalTranscript = "";
 
-            for (let i = event.resultIndex; i < event.results.length; ++i) {
-                if (event.results[i].isFinal) {
-                    finalTranscript += event.results[i][0].transcript;
-                } else {
-                    interimTranscript += event.results[i][0].transcript;
-                }
-            }
+			for (let i = event.resultIndex; i < event.results.length; ++i) {
+				if (event.results[i].isFinal) {
+					finalTranscript += event.results[i][0].transcript;
+				} else {
+					interimTranscript += event.results[i][0].transcript;
+				}
+			}
 
-            // Показываем промежуточный результат в плейсхолдере или инпуте
-            if (interimTranscript) {
-                promptInput.placeholder = interimTranscript + "...";
-            }
+			console.log("Transcript:", {
+				interim: interimTranscript,
+				final: finalTranscript,
+			});
 
-            if (finalTranscript) {
-                const currentText = promptInput.value;
-                const prefix = (currentText && !currentText.endsWith(' ')) ? ' ' : '';
-                
-                // 1. Добавляем распознанный текст в инпут
-                promptInput.value = currentText + prefix + finalTranscript;
+			// Показываем промежуточный результат в плейсхолдере или инпуте
+			if (interimTranscript) {
+				promptInput.placeholder = interimTranscript + "...";
+			}
 
-                // 2. Останавливаем распознавание
-                recognition.stop();
+			if (finalTranscript) {
+				const currentText = promptInput.value;
+				const prefix =
+					currentText && !currentText.endsWith(" ") ? " " : "";
 
-                // 3. АВТОМАТИЧЕСКАЯ ОТПРАВКА
-                setTimeout(() => {
-                    if (promptInput.value.trim()) {
-                        sendMessage();
-                    }
-                }, 500);
-            }
-        };
+				// 1. Добавляем распознанный текст в инпут
+				promptInput.value = currentText + prefix + finalTranscript;
 
-        recognition.onerror = (event) => {
-            console.error("Speech recognition error", event.error);
-            micBtn.classList.remove("listening");
-            
-            // КЛЮЧЕВОЙ МОМЕНТ: Обработка отсутствия прав
-            if (event.error === 'not-allowed' || event.error === 'permission-denied') {
-                addStatus("Требуется разрешение на микрофон.");
-                // Открываем страницу разрешения в новой вкладке
-                chrome.tabs.create({ url: 'permission.html' });
-            }
-        };
+				// 2. Останавливаем распознавание
+				recognition.stop();
+
+				// 3. АВТОМАТИЧЕСКАЯ ОТПРАВКА
+				setTimeout(() => {
+					if (promptInput.value.trim()) {
+						sendMessage();
+					}
+				}, 500);
+			}
+		};
+
+		recognition.onerror = (event) => {
+			console.error("Speech recognition error", event.error);
+			micBtn.classList.remove("listening");
+
+			if (event.error === "no-speech") {
+				addStatus("Речь не распознана. Попробуйте еще раз.");
+				return;
+			}
+
+			// КЛЮЧЕВОЙ МОМЕНТ: Обработка отсутствия прав
+			if (
+				event.error === "not-allowed" ||
+				event.error === "permission-denied"
+			) {
+				addStatus("Требуется разрешение на микрофон.");
+				// Открываем страницу разрешения в новой вкладке
+				chrome.tabs.create({ url: "permission.html" });
+			}
+		};
 	} else {
-		micBtn.style.display = 'none'; // Скрыть кнопку, если браузер не поддерживает
+		micBtn.style.display = "none"; // Скрыть кнопку, если браузер не поддерживает
 		console.warn("Web Speech API not supported");
 	}
 
-    micBtn.addEventListener("click", () => {
-        if (!recognition) return;
+	micBtn.addEventListener("click", () => {
+		if (!recognition) return;
 
-        if (micBtn.classList.contains("listening")) {
-            recognition.stop();
-        } else {
-            // Если соединение еще не установлено, не даем говорить (опционально)
-            if (!isConnected) {
-                addStatus("Дождитесь соединения с сервером.");
-                return;
-            }
-            try {
-                recognition.start();
-            } catch (e) {
-                console.error(e);
-            }
-        }
-    });
+		if (micBtn.classList.contains("listening")) {
+			recognition.stop();
+		} else {
+			// Если соединение еще не установлено, не даем говорить (опционально)
+			if (!isConnected) {
+				addStatus("Дождитесь соединения с сервером.");
+				return;
+			}
+			try {
+				recognition.start();
+			} catch (e) {
+				console.error(e);
+			}
+		}
+	});
 });

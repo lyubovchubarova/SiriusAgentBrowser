@@ -91,6 +91,14 @@ class AgentWorker(threading.Thread):
                 break  # Stop signal
 
             query, chat_history, result_queue = item
+
+            # Clear input queue from stale messages
+            while not input_queue.empty():
+                try:
+                    input_queue.get_nowait()
+                except queue.Empty:
+                    break
+
             try:
                 logger.info(f"Worker processing query: {query}")
                 if self.orchestrator:
@@ -116,15 +124,24 @@ class AgentWorker(threading.Thread):
                             json.dumps({"type": "question", "content": question})
                         )
 
-                        # Wait for answer
-                        # Clear queue first to avoid stale answers?
-                        # while not input_queue.empty():
-                        #     input_queue.get()
-
                         # Block until answer received
-                        answer = input_queue.get()
-                        logger.info(f"Received user answer: {answer}")
-                        return answer
+                        while True:
+                            answer = input_queue.get()
+                            if answer == "__STOP__":
+                                if (
+                                    self.orchestrator
+                                    and self.orchestrator._stop_requested
+                                ):
+                                    logger.info(
+                                        "User input interrupted by stop signal."
+                                    )
+                                    return "STOPPED"
+                                else:
+                                    # Stale stop signal, ignore
+                                    continue
+
+                            logger.info(f"Received user answer: {answer}")
+                            return answer
 
                     result = self.orchestrator.process_request(
                         query,
@@ -220,6 +237,8 @@ class AgentWorker(threading.Thread):
     def stop_current_task(self) -> None:
         if self.orchestrator:
             self.orchestrator.stop()
+        # Unblock any potential user input wait
+        input_queue.put("__STOP__")
 
 
 # Global worker instance

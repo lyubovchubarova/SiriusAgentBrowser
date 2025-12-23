@@ -483,9 +483,14 @@ class Orchestrator:
 
                     history_str += f"{step_desc} -> Result: {result_text}\n"
 
-                print(
-                    f"\n[PLANNER LOG] Updating plan based on history ({len(execution_history)} steps):\n{history_str}"
-                )
+                try:
+                    print(
+                        f"\n[PLANNER LOG] Updating plan based on history ({len(execution_history)} steps):\n{history_str}"
+                    )
+                except UnicodeEncodeError:
+                    print(
+                        f"\n[PLANNER LOG] Updating plan based on history ({len(execution_history)} steps):\n{history_str.encode('ascii', 'replace').decode('ascii')}"
+                    )
 
                 # Simple cycle detection
                 # If the exact same action description and result happened in the last 3 steps (excluding current), warn

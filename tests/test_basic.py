@@ -1,5 +1,4 @@
 import json
-import shlex
 import sqlite3
 import subprocess
 import openai
@@ -14,9 +13,10 @@ YANDEX_CLOUD_API_KEY = os.getenv("YANDEX_CLOUD_API_KEY")
 YANDEX_CLOUD_MODEL = "qwen3-235b-a22b-fp8/latest"
 
 
-def request(prompt):
+def request(prompt: str) -> str:
+    # Use 'python' instead of hardcoded venv path for cross-platform compatibility
     subprocess.run(
-        shlex.split(f'venv/Scripts/python src/main.py "{prompt}"'),
+        ["python", "src/main.py", prompt],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL
     )
@@ -34,7 +34,7 @@ def request(prompt):
     return json.dumps({"request": prompt, "objects": rows}, ensure_ascii=False, indent=2)
 
 
-def judge(response):
+def judge(response: str) -> str:
     system_prompt = (
         "Ты судья для тестов браузерного агента.\n"
         "На вход подаётся JSON с шагами агента.\n"
@@ -50,16 +50,17 @@ def judge(response):
         project=YANDEX_CLOUD_FOLDER
     )
 
-    response = client.responses.create(
+    # The client.responses.create method might not be fully typed in the library or stubs
+    # We assume it returns an object with output_text
+    api_response = client.responses.create(
         model=f"gpt://{YANDEX_CLOUD_FOLDER}/{YANDEX_CLOUD_MODEL}",
         temperature=0.3,
         instructions=system_prompt,
         input=response,
     )
-    return response.output_text
+    return str(api_response.output_text)
 
-
-def test_prompts():
+def test_prompts() -> None:
     with open("tests/test_requests.json", "r", encoding="utf-8") as f:
         data = json.load(f)
 
@@ -88,7 +89,9 @@ def test_prompts():
         cur = con.cursor()
         res = cur.execute("SELECT total_tokens FROM session_stats ORDER BY start_time DESC LIMIT 1").fetchone()
         con.close()
-        summary_tokens += res[0]
+        if res:
+            summary_tokens += res[0]
+        
         pct_succes = succes / idx * 100
         bar.set_postfix({
             "success_pct": f"{pct_succes:.2f}%",
