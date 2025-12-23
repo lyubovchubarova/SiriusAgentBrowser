@@ -1,6 +1,5 @@
 import json
 import os
-import shlex
 import sqlite3
 import subprocess
 
@@ -14,7 +13,8 @@ YANDEX_CLOUD_MODEL = os.getenv("YANDEX_CLOUD_MODEL_PATH")
 
 
 def request(prompt):
-    subprocess.run(shlex.split(f'venv/Scripts/python src/main.py "{prompt}"'))
+    # Use 'python' instead of hardcoded venv path for cross-platform compatibility
+    subprocess.run(["python", "src/main.py", prompt])
     db = "logs.db"
     q1 = "SELECT session_id FROM action_logs ORDER BY id DESC LIMIT 1"
     q2 = "SELECT component, action_type, message, details FROM action_logs WHERE session_id = ?"
