@@ -15,6 +15,7 @@ Action = Literal[
     "search",
     "solve_captcha",
     "ask_user",
+    "call_tool",
 ]
 
 

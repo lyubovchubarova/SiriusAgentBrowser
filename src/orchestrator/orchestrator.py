@@ -1,5 +1,7 @@
 import logging
 import uuid
+import json
+import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -9,6 +11,7 @@ from src.logger_db import log_action
 from src.memory.long_term_memory import LongTermMemory
 from src.planner.planner import Planner
 from src.tools.search import yandex_search
+from src.tools.google_calendar_controller import GoogleCalendarController
 from src.vlm.vlm import VisionAgent
 
 if TYPE_CHECKING:
@@ -30,6 +33,11 @@ class Orchestrator:
         self.vision_agent = VisionAgent()
         self.browser_controller = BrowserController(
             BrowserOptions(headless=headless, cdp_url=cdp_url)
+        )
+        # Initialize calendar controller with browser navigate callback
+        self.calendar = GoogleCalendarController(
+            # Use BrowserController.open to navigate; navigate() does not exist
+            browser_navigate_callback=lambda url: self.browser_controller.open(url)
         )
         self.memory = LongTermMemory()
         self._is_browser_started = False
@@ -262,6 +270,63 @@ class Orchestrator:
                     except Exception as e:
                         logger.error(f"Text extraction failed: {e}")
                         result = f"Failed to extract text: {e}"
+
+                elif step.action == "call_tool":
+                    logger.info(f"Calling Tool: {step.description}")
+                    try:
+                        # Try to parse description as JSON
+                        # Expected format: {"tool": "google_calendar", "method": "create_event", "args": {...}}
+                        tool_call = json.loads(step.description)
+                        tool_name = tool_call.get("tool")
+                        method = tool_call.get("method")
+                        args = tool_call.get("args", {})
+
+                        if tool_name == "google_calendar":
+                            if method == "create_event":
+                                # Convert strings to datetime
+                                if "start_time" in args:
+                                    args["start_time"] = datetime.datetime.fromisoformat(args["start_time"])
+                                if "end_time" in args:
+                                    args["end_time"] = datetime.datetime.fromisoformat(args["end_time"])
+
+                                result = self.calendar.create_event(**args)
+                            elif method == "list_events_for_date":
+                                # Convert string to date if provided
+                                if "date" in args and isinstance(args["date"], str):
+                                    args["date"] = datetime.date.fromisoformat(args["date"])
+                                result = self.calendar.list_events_for_date(**args)
+                            elif method == "delete_event":
+                                result = self.calendar.delete_event(**args)
+                            elif method == "set_date":
+                                # Convert string to date if provided
+                                if "date" in args and isinstance(args["date"], str):
+                                    args["date"] = datetime.date.fromisoformat(args["date"])
+                                result = self.calendar.set_date(**args)
+                            elif method == "get_current_date":
+                                result = self.calendar.get_current_date()
+                            elif method == "update_event":
+                                # Convert strings to datetime if provided
+                                if "start_time" in args:
+                                    args["start_time"] = datetime.datetime.fromisoformat(args["start_time"])
+                                if "end_time" in args:
+                                    args["end_time"] = datetime.datetime.fromisoformat(args["end_time"])
+                                result = self.calendar.update_event(**args)
+                            elif method == "open_calendar":
+                                # Convert string to date if provided
+                                if "date" in args and isinstance(args["date"], str):
+                                    args["date"] = datetime.date.fromisoformat(args["date"])
+                                result = self.calendar.open_calendar(**args)
+                            else:
+                                result = f"Unknown method: {method}"
+                        else:
+                            result = f"Unknown tool: {tool_name}"
+
+                        result = str(result)
+
+                    except json.JSONDecodeError:
+                        result = "Error: Description must be valid JSON for call_tool action. Example: {\"tool\": \"google_calendar\", \"method\": \"create_event\", \"args\": {\"summary\": \"Meeting\", \"start_time\": \"2023-10-27T10:00:00\", \"end_time\": \"2023-10-27T11:00:00\"}}"
+                    except Exception as e:
+                        result = f"Tool execution failed: {e}"
 
                 elif step.action == "search":
                     logger.info(f"Executing Search: {step.description}")

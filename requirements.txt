@@ -10,3 +10,4 @@ fastapi==0.116.1
 uvicorn==0.35.0
 ruff==0.14.10
 types-requests==2.31.0.6
+types-google-cloud-ndb==2.2
