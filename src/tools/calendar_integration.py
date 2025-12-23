@@ -34,8 +34,8 @@ class GoogleCalendarTool(CalendarTool):
         pass
 
     def list_events(
-        self, start_time: datetime.datetime, end_time: datetime.datetime
-    ) -> list[dict[str, Any]]:  # noqa: ARG002
+        self, _start_time: datetime.datetime, _end_time: datetime.datetime
+    ) -> list[dict[str, Any]]:
         if not self.service:
             return [{"error": "Not authenticated"}]
 
