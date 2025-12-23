@@ -302,11 +302,20 @@ document.addEventListener("DOMContentLoaded", () => {
         };
 
 		recognition.onresult = (event) => {
+            let interimTranscript = '';
             let finalTranscript = '';
+
             for (let i = event.resultIndex; i < event.results.length; ++i) {
                 if (event.results[i].isFinal) {
                     finalTranscript += event.results[i][0].transcript;
+                } else {
+                    interimTranscript += event.results[i][0].transcript;
                 }
+            }
+
+            // Показываем промежуточный результат в плейсхолдере или инпуте
+            if (interimTranscript) {
+                promptInput.placeholder = interimTranscript + "...";
             }
 
             if (finalTranscript) {
@@ -316,14 +325,15 @@ document.addEventListener("DOMContentLoaded", () => {
                 // 1. Добавляем распознанный текст в инпут
                 promptInput.value = currentText + prefix + finalTranscript;
 
-                // 2. Останавливаем распознавание (чтобы не слушало лишнего)
+                // 2. Останавливаем распознавание
                 recognition.stop();
 
                 // 3. АВТОМАТИЧЕСКАЯ ОТПРАВКА
-                // Делаем небольшую задержку (300мс), чтобы пользователь увидел текст перед отправкой
                 setTimeout(() => {
-                    sendMessage();
-                }, 300);
+                    if (promptInput.value.trim()) {
+                        sendMessage();
+                    }
+                }, 500);
             }
         };
 

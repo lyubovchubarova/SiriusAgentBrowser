@@ -3,7 +3,7 @@
 	"name": "Sirius Agent Browser",
 	"version": "1.0",
 	"description": "AI Agent Side Panel for Browser Control",
-	"permissions": ["sidePanel", "offscreen"],
+	"permissions": ["sidePanel", "offscreen", "audio"],
 	"side_panel": {
 		"default_path": "sidepanel.html"
 	},
