@@ -6,6 +6,7 @@ import openai
 import dotenv
 import os
 from tqdm import tqdm
+import time
 
 dotenv.load_dotenv()
 YANDEX_CLOUD_FOLDER = os.getenv("YANDEX_CLOUD_FOLDER")
@@ -57,6 +58,7 @@ def judge(response):
     )
     return response.output_text
 
+
 def test_prompts():
     with open("tests/test_requests.json", "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -66,7 +68,7 @@ def test_prompts():
     total = len(data)
 
     bar = tqdm(total=total, desc="Tests", unit="req")
-
+    unsucces = []
     for idx, obj in enumerate(data, 1):
         open("tests/result.json", "w", encoding="utf8").write(
             request(obj["query"])
@@ -79,6 +81,8 @@ def test_prompts():
 
         if answer.get("result") == "OK":
             succes += 1
+        else:
+            unsucces.append(obj["id"])
 
         con = sqlite3.connect("logs.db")
         cur = con.cursor()
@@ -88,12 +92,17 @@ def test_prompts():
         pct_succes = succes / idx * 100
         bar.set_postfix({
             "success_pct": f"{pct_succes:.2f}%",
-            "avg_tokens": f"{summary_tokens/idx:.1f}"
+            "avg_tokens": f"{summary_tokens / idx:.2f}"
         })
         bar.update(1)
 
     bar.close()
     print(f"Итог: {succes}/{total} успешных ({succes / total * 100:.2f}%)")
+    print(f"Затрачено токенов: {summary_tokens}. Среднее количество токенов: {summary_tokens / total:.2f}")
+    with open("tests/logs/" + time.strftime("%Y%m%d_%H%M%S") + ".log", "w", encoding="utf8") as f:
+        print(f"Итог: {succes}/{total} успешных ({succes / total * 100:.2f}%)", file=f)
+        print(f"Затрачено токенов: {summary_tokens}. Среднее количество токенов: {summary_tokens / total:.2f}", file=f)
+        print(unsucces, file=f)
 
 
 if __name__ == "__main__":
