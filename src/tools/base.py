@@ -12,16 +12,26 @@ class BaseTool(ABC):
     def description(self) -> str:
         pass
 
+
 class CalendarTool(BaseTool):
     @abstractmethod
-    def list_events(self, start_time: datetime.datetime, end_time: datetime.datetime) -> list[dict[str, Any]]:
+    def list_events(
+        self, start_time: datetime.datetime, end_time: datetime.datetime
+    ) -> list[dict[str, Any]]:
         """List events in a given time range."""
         pass
 
     @abstractmethod
-    def create_event(self, summary: str, start_time: datetime.datetime, end_time: datetime.datetime, description: str | None = None) -> dict[str, Any]:
+    def create_event(
+        self,
+        summary: str,
+        start_time: datetime.datetime,
+        end_time: datetime.datetime,
+        description: str | None = None,
+    ) -> dict[str, Any]:
         """Create a new event."""
         pass
+
 
 class NotesTool(BaseTool):
     @abstractmethod

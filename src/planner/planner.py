@@ -200,9 +200,9 @@ Return ONLY one word: "agent" or "chat".
         # Determine model to use
         model_to_use = self.model
         if self.provider == "yandex":
-             if self.model_path.startswith("gpt://"):
+            if self.model_path.startswith("gpt://"):
                 model_to_use = self.model_path
-             else:
+            else:
                 model_to_use = f"gpt://{self.folder}/{self.model_path}"
 
         try:

@@ -6,6 +6,7 @@ from .base import NotesTool
 # Placeholder for notion client
 # from notion_client import Client
 
+
 class NotionTool(NotesTool):
     def __init__(self, api_token: str | None = None):
         self.api_token = api_token or os.getenv("NOTION_API_TOKEN")
@@ -23,8 +24,10 @@ class NotionTool(NotesTool):
     def create_page(self, title: str, content: str) -> dict[str, Any]:
         if not self.api_token:
             return {"error": "NOTION_API_TOKEN not set"}
-        
-        print(f"[Notion] Would create page '{title}' with content length {len(content)}")
+
+        print(
+            f"[Notion] Would create page '{title}' with content length {len(content)}"
+        )
         # Implementation using self.client.pages.create(...)
         return {"status": "mock_created", "id": "mock_page_id"}
 

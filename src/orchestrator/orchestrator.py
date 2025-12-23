@@ -227,7 +227,7 @@ class Orchestrator:
                 if step.action == "ask_user":
                     logger.info(f"Asking user: {step.description}")
                     report_status(f"Waiting for user input: {step.description}")
-                    
+
                     if user_input_callback:
                         try:
                             user_answer = user_input_callback(step.description)
@@ -241,7 +241,7 @@ class Orchestrator:
                             user_answer = input("Your answer: ")
                         except EOFError:
                             user_answer = "No answer provided."
-                    
+
                     result = f"User answered: {user_answer}"
                     logger.info(f"User answer received: {user_answer}")
 

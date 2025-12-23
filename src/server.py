@@ -109,15 +109,18 @@ class AgentWorker(threading.Thread):
 
                     def on_user_input(question: str) -> str:
                         import json
+
                         logger.info(f"Requesting user input: {question}")
                         # Send question to client
-                        log_queue.put(json.dumps({"type": "question", "content": question}))
-                        
+                        log_queue.put(
+                            json.dumps({"type": "question", "content": question})
+                        )
+
                         # Wait for answer
                         # Clear queue first to avoid stale answers?
                         # while not input_queue.empty():
                         #     input_queue.get()
-                        
+
                         # Block until answer received
                         answer = input_queue.get()
                         logger.info(f"Received user answer: {answer}")
