@@ -1,11 +1,13 @@
 import json
+import os
 import sqlite3
 import subprocess
-import openai
-import dotenv
-import os
-from tqdm import tqdm
 import time
+from pathlib import Path
+
+import dotenv
+import openai
+from tqdm import tqdm  # type: ignore
 
 dotenv.load_dotenv()
 YANDEX_CLOUD_FOLDER = os.getenv("YANDEX_CLOUD_FOLDER")
@@ -18,7 +20,7 @@ def request(prompt: str) -> str:
     subprocess.run(
         ["python", "src/main.py", prompt],
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
+        stderr=subprocess.DEVNULL,
     )
     db = "logs.db"
     q1 = "SELECT session_id FROM action_logs ORDER BY id DESC LIMIT 1"
@@ -31,7 +33,9 @@ def request(prompt: str) -> str:
         return json.dumps({"request": prompt, "objects": []}, ensure_ascii=False)
     sid = r[0]
     rows = [dict(x) for x in cur.execute(q2, (sid,)).fetchall()]
-    return json.dumps({"request": prompt, "objects": rows}, ensure_ascii=False, indent=2)
+    return json.dumps(
+        {"request": prompt, "objects": rows}, ensure_ascii=False, indent=2
+    )
 
 
 def judge(response: str) -> str:
@@ -47,7 +51,7 @@ def judge(response: str) -> str:
     client = openai.OpenAI(
         api_key=YANDEX_CLOUD_API_KEY,
         base_url="https://rest-assistant.api.cloud.yandex.net/v1",
-        project=YANDEX_CLOUD_FOLDER
+        project=YANDEX_CLOUD_FOLDER,
     )
 
     # The client.responses.create method might not be fully typed in the library or stubs
@@ -60,8 +64,9 @@ def judge(response: str) -> str:
     )
     return str(api_response.output_text)
 
+
 def test_prompts() -> None:
-    with open("tests/test_requests.json", "r", encoding="utf-8") as f:
+    with Path("tests/test_requests.json").open(encoding="utf-8") as f:
         data = json.load(f)
 
     succes = 0
@@ -71,13 +76,13 @@ def test_prompts() -> None:
     bar = tqdm(total=total, desc="Tests", unit="req")
     unsucces = []
     for idx, obj in enumerate(data, 1):
-        open("tests/result.json", "w", encoding="utf8").write(
-            request(obj["query"])
-        )
-        open("tests/judge_answer.json", "w", encoding="utf8").write(
-            judge(open("tests/result.json", "r", encoding="utf8").read())
-        )
-        with open("tests/judge_answer.json", "r", encoding="utf-8") as f:
+        Path("tests/result.json").write_text(request(obj["query"]), encoding="utf8")
+        
+        result_content = Path("tests/result.json").read_text(encoding="utf8")
+        judge_content = judge(result_content)
+        Path("tests/judge_answer.json").write_text(judge_content, encoding="utf8")
+        
+        with Path("tests/judge_answer.json").open(encoding="utf-8") as f:
             answer = json.load(f)
 
         if answer.get("result") == "OK":
@@ -87,24 +92,36 @@ def test_prompts() -> None:
 
         con = sqlite3.connect("logs.db")
         cur = con.cursor()
-        res = cur.execute("SELECT total_tokens FROM session_stats ORDER BY start_time DESC LIMIT 1").fetchone()
+        res = cur.execute(
+            "SELECT total_tokens FROM session_stats ORDER BY start_time DESC LIMIT 1"
+        ).fetchone()
         con.close()
         if res:
             summary_tokens += res[0]
-        
+
         pct_succes = succes / idx * 100
-        bar.set_postfix({
-            "success_pct": f"{pct_succes:.2f}%",
-            "avg_tokens": f"{summary_tokens / idx:.2f}"
-        })
+        bar.set_postfix(
+            {
+                "success_pct": f"{pct_succes:.2f}%",
+                "avg_tokens": f"{summary_tokens / idx:.2f}",
+            }
+        )
         bar.update(1)
 
     bar.close()
     print(f"Итог: {succes}/{total} успешных ({succes / total * 100:.2f}%)")
-    print(f"Затрачено токенов: {summary_tokens}. Среднее количество токенов: {summary_tokens / total:.2f}")
-    with open("tests/logs/" + time.strftime("%Y%m%d_%H%M%S") + ".log", "w", encoding="utf8") as f:
+    print(
+        f"Затрачено токенов: {summary_tokens}. Среднее количество токенов: {summary_tokens / total:.2f}"
+    )
+    
+    log_path = Path("tests/logs") / (time.strftime("%Y%m%d_%H%M%S") + ".log")
+    log_path.parent.mkdir(exist_ok=True, parents=True)
+    with log_path.open("w", encoding="utf8") as f:
         print(f"Итог: {succes}/{total} успешных ({succes / total * 100:.2f}%)", file=f)
-        print(f"Затрачено токенов: {summary_tokens}. Среднее количество токенов: {summary_tokens / total:.2f}", file=f)
+        print(
+            f"Затрачено токенов: {summary_tokens}. Среднее количество токенов: {summary_tokens / total:.2f}",
+            file=f,
+        )
         print(unsucces, file=f)
 
 
