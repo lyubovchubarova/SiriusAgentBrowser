@@ -1,8 +1,8 @@
+import datetime
 import json
 import os
 import re
 import time
-import datetime
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -148,7 +148,7 @@ def extract_json(text: str) -> str:
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if not match:
         raise PlannerError("LLM returned no JSON object", raw_output=text)
-    
+
     json_str = match.group(0)
     return json_str
 
@@ -478,7 +478,7 @@ Return ONLY one word: "agent" or "chat".
     ) -> Plan:
         last_raw = ""
         last_err = ""
-        
+
         # Add specific instruction to avoid JSONDecodeError for tool calls
         user_prompt += "\n\nIMPORTANT: When using 'call_tool', ensure the 'description' field is a valid JSON string with ESCAPED double quotes. Do NOT use single quotes for the JSON string."
 

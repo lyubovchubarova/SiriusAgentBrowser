@@ -1,11 +1,12 @@
+# ruff: noqa: PTH100, PTH110, PTH117, PTH118, PTH120, PTH123
 import datetime
 import os.path
 from typing import Any
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
+from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore[import-untyped]
+from googleapiclient.discovery import build  # type: ignore[import-untyped]
 
 from .base import CalendarTool
 
@@ -18,17 +19,17 @@ class GoogleCalendarTool(CalendarTool):
     ) -> None:
         # Use absolute paths relative to the project root if not provided
         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        
+
         if not os.path.isabs(credentials_path):
             self.credentials_path = os.path.join(base_dir, credentials_path)
         else:
             self.credentials_path = credentials_path
-            
+
         if not os.path.isabs(token_path):
             self.token_path = os.path.join(base_dir, token_path)
         else:
             self.token_path = token_path
-            
+
         self.service = None
         self._authenticate()
 
@@ -52,18 +53,18 @@ class GoogleCalendarTool(CalendarTool):
         # created automatically when the authorization flow completes for the first
         # time.
         if os.path.exists(self.token_path):
-            creds = Credentials.from_authorized_user_file(self.token_path, SCOPES)
+            creds = Credentials.from_authorized_user_file(self.token_path, SCOPES)  # type: ignore[no-untyped-call]
         # If there are no (valid) credentials available, let the user log in.
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
+                creds.refresh(Request())  # type: ignore[no-untyped-call]
             else:
                 if not os.path.exists(self.credentials_path):
                     print(f"Warning: {self.credentials_path} not found. Calendar tool will not work.")
                     return
-                
+
                 # Check if we are in a headless/server environment where we can't open a browser
-                # For now, we'll just try to run the local server. 
+                # For now, we'll just try to run the local server.
                 # In a real production agent, we might need a different flow or pre-generated token.
                 try:
                     flow = InstalledAppFlow.from_client_secrets_file(
@@ -119,7 +120,7 @@ class GoogleCalendarTool(CalendarTool):
             if os.environ.get("MOCK_CALENDAR", "false").lower() == "true":
                  print(f"[GoogleCalendar MOCK] Created event: {summary} at {start_time}")
                  return {"status": "created (mock)", "event": {"summary": summary, "start": str(start_time)}}
-            
+
             return {"error": "Not authenticated"}
 
         event = {

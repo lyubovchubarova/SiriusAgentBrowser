@@ -413,7 +413,7 @@ class BrowserController:
 
             const w = x2 - x;
             const h = y2 - y;
-            
+
             // Smart Filtering: Double check size after clamping
             if (w < 8 || h < 8) continue;
 
@@ -570,7 +570,7 @@ class BrowserController:
                 '[class*="popup"] [class*="close"]',
                 '[class*="modal"] [class*="close"]'
             ];
-            
+
             const cookieSelectors = [
                 '#onetrust-accept-btn-handler',
                 '#accept-cookie-notification',
@@ -583,7 +583,7 @@ class BrowserController:
             ];
 
             let actionTaken = false;
-            
+
             const clickAll = (selectors) => {
                 for (const sel of selectors) {
                     try {
@@ -593,7 +593,7 @@ class BrowserController:
                             if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') continue;
                             const r = el.getBoundingClientRect();
                             if (r.width === 0 || r.height === 0) continue;
-                            
+
                             // Ensure it's clickable
                             el.click();
                             actionTaken = true;
@@ -604,7 +604,7 @@ class BrowserController:
 
             clickAll(closeSelectors);
             clickAll(cookieSelectors);
-            
+
             return actionTaken;
         }
         """

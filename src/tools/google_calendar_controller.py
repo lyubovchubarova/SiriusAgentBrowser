@@ -4,16 +4,18 @@ GoogleCalendarController - высокоуровневый класс для уп
 Предоставляет методы для создания/удаления встреч, переключения между днями и т.д.
 """
 
+# ruff: noqa: PTH100, PTH110, PTH114, PTH115, PTH117, PTH118, PTH120, PTH123
 import datetime
 import os
 import os.path
-from typing import Any, Optional, Callable
 import webbrowser
+from collections.abc import Callable
+from typing import Any
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
+from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore[import-untyped]
+from googleapiclient.discovery import build  # type: ignore[import-untyped]
 
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
@@ -29,11 +31,11 @@ class GoogleCalendarController:
         self,
         credentials_path: str = "credentials.json",
         token_path: str = "token.json",
-        browser_navigate_callback: Optional[Callable[[str], None]] = None,
+        browser_navigate_callback: Callable[[str], None] | None = None,
     ) -> None:
         """
         Инициализирует контроллер календаря.
-        
+
         Args:
             credentials_path: Путь к credentials.json (от корня проекта).
             token_path: Путь к token.json (от корня проекта).
@@ -71,8 +73,8 @@ class GoogleCalendarController:
         self._authenticate()
 
     def _apply_default_offset(
-        self, dt: Optional[datetime.datetime]
-    ) -> Optional[datetime.datetime]:
+        self, dt: datetime.datetime | None
+    ) -> datetime.datetime | None:
         """Apply default event offset (in minutes) to provided datetime.
         Returns the same value if dt is None or offset is 0.
         """
@@ -95,12 +97,12 @@ class GoogleCalendarController:
 
         # Попытка загрузить сохранённые учётные данные
         if os.path.exists(self.token_path):
-            creds = Credentials.from_authorized_user_file(self.token_path, SCOPES)
+            creds = Credentials.from_authorized_user_file(self.token_path, SCOPES)  # type: ignore[no-untyped-call]
 
         # Если учётные данные отсутствуют или невалидны
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
+                creds.refresh(Request())  # type: ignore[no-untyped-call]
             else:
                 if not os.path.exists(self.credentials_path):
                     print(
@@ -135,7 +137,7 @@ class GoogleCalendarController:
         try:
             tz_file = "/etc/timezone"
             if os.path.exists(tz_file):
-                with open(tz_file, "r", encoding="utf-8") as f:
+                with open(tz_file, encoding="utf-8") as f:
                     val = f.read().strip()
                     if val:
                         return val
@@ -168,30 +170,37 @@ class GoogleCalendarController:
         start_time: datetime.datetime,
         end_time: datetime.datetime,
         description: str = "",
-        guests: Optional[list[str]] = None,
+        guests: list[str] | None = None,
     ) -> dict[str, Any]:
         """
         Создаёт новую встречу в календаре.
-        
+
         Args:
             summary: Название встречи.
             start_time: Начало встречи (datetime).
             end_time: Конец встречи (datetime).
             description: Описание встречи.
             guests: Список email адресов приглашённых.
-            
+
         Returns:
             Словарь с информацией о созданной встречи или ошибкой.
         """
         # Локализуем сначала, затем применяем offset
-        start_time = self._ensure_local(start_time)
-        end_time = self._ensure_local(end_time)
-        start_time = self._apply_default_offset(start_time)
-        end_time = self._apply_default_offset(end_time)
-        
+        start_local = self._ensure_local(start_time)
+        end_local = self._ensure_local(end_time)
+        start_offset = self._apply_default_offset(start_local)
+        end_offset = self._apply_default_offset(end_local)
+
+        # Ensure offset results are not None (should never happen with valid input)
+        if start_offset is None or end_offset is None:
+            return {"status": "error", "message": "Invalid time values"}
+
         # Если end_time раньше start_time, добавляем 1 день к end_time
-        if end_time <= start_time:
-            end_time = end_time + datetime.timedelta(days=1)
+        if end_offset <= start_offset:
+            end_offset = end_offset + datetime.timedelta(days=1)
+
+        start_time = start_offset
+        end_time = end_offset
 
         if not self.service:
             if os.environ.get("MOCK_CALENDAR", "false").lower() == "true":
@@ -244,7 +253,7 @@ class GoogleCalendarController:
             )
             # Открываем главную страницу календаря
             self.open_calendar()
-            
+
             return {
                 "status": "success",
                 "message": f"Event '{summary}' created successfully",
@@ -259,10 +268,10 @@ class GoogleCalendarController:
     def delete_event(self, event_id: str) -> dict[str, Any]:
         """
         Удаляет встречу из календаря.
-        
+
         Args:
             event_id: ID встречи для удаления.
-            
+
         Returns:
             Словарь со статусом операции.
         """
@@ -289,13 +298,13 @@ class GoogleCalendarController:
             print(f"[GoogleCalendarController] Error deleting event: {error_msg}")
             return {"status": "error", "message": error_msg}
 
-    def list_events_for_date(self, date: Optional[datetime.date] = None) -> dict[str, Any]:
+    def list_events_for_date(self, date: datetime.date | None = None) -> dict[str, Any]:
         """
         Возвращает список встреч для указанной даты (или текущей).
-        
+
         Args:
             date: Дата для поиска встреч (если None, используется текущая дата).
-            
+
         Returns:
             Словарь с информацией о встречах.
         """
@@ -344,7 +353,7 @@ class GoogleCalendarController:
 
             events = events_result.get("items", [])
             print(f"[GoogleCalendarController] Listed {len(events)} events for {date}")
-            self._open_calendar_default(date)
+            self._open_calendar_default()
             return {
                 "status": "success",
                 "date": date.isoformat(),
@@ -358,15 +367,15 @@ class GoogleCalendarController:
     def set_date(self, date: datetime.date) -> dict[str, Any]:
         """
         Переключается на указанную дату (устанавливает текущую дату для работы).
-        
+
         Args:
             date: Новая дата.
-            
+
         Returns:
             Словарь со статусом и информацией о встречах на эту дату.
         """
         self._current_date = date
-        self._open_calendar_default(date)
+        self._open_calendar_default()
         print(f"[GoogleCalendarController] Switched to date: {date}")
 
         # Возвращаем встречи на новую дату
@@ -375,11 +384,11 @@ class GoogleCalendarController:
     def get_current_date(self) -> dict[str, Any]:
         """
         Возвращает текущую установленную дату контроллера.
-        
+
         Returns:
             Словарь с информацией о текущей дате и встречах на неё.
         """
-        self._open_calendar_default(self._current_date)
+        self._open_calendar_default()
         return {
             "status": "success",
             "current_date": self._current_date.isoformat(),
@@ -389,21 +398,21 @@ class GoogleCalendarController:
     def update_event(
         self,
         event_id: str,
-        summary: Optional[str] = None,
-        start_time: Optional[datetime.datetime] = None,
-        end_time: Optional[datetime.datetime] = None,
-        description: Optional[str] = None,
+        summary: str | None = None,
+        start_time: datetime.datetime | None = None,
+        end_time: datetime.datetime | None = None,
+        description: str | None = None,
     ) -> dict[str, Any]:
         """
         Обновляет существующую встречу.
-        
+
         Args:
             event_id: ID встречи для обновления.
             summary: Новое название (опционально).
             start_time: Новое время начала (опционально).
             end_time: Новое время конца (опционально).
             description: Новое описание (опционально).
-            
+
         Returns:
             Словарь со статусом операции.
         """
@@ -446,9 +455,8 @@ class GoogleCalendarController:
             )
 
             print(f"[GoogleCalendarController] Updated event: {event_id}")
-            # Открываем календарь на дату начала события, если она есть, иначе текущая дата
-            target_date = start_time.date() if start_time else self._current_date
-            self._open_calendar_default(target_date)
+            # Открываем календарь
+            self._open_calendar_default()
             return {
                 "status": "success",
                 "message": f"Event {event_id} updated successfully",
@@ -459,13 +467,17 @@ class GoogleCalendarController:
             print(f"[GoogleCalendarController] Error updating event: {error_msg}")
             return {"status": "error", "message": error_msg}
 
-    def open_calendar(self, date: Optional[datetime.date] = None) -> dict[str, Any]:
+    def _open_calendar_default(self) -> None:
+        """Helper to safely open calendar after operations."""
+        try:
+            self.open_calendar()
+        except Exception as e:
+            print(f"[GoogleCalendarController] Failed to open calendar: {e}")
+
+    def open_calendar(self) -> dict[str, Any]:
         """
         Открывает главную страницу Google Calendar в браузере.
-        
-        Args:
-            date: Не используется, оставлено для обратной совместимости.
-            
+
         Returns:
             Словарь с статусом операции.
         """
