@@ -1,10 +1,11 @@
 import json
+import os
 import shlex
 import sqlite3
 import subprocess
-import openai
+
 import dotenv
-import os
+import openai
 
 dotenv.load_dotenv()
 YANDEX_CLOUD_FOLDER = os.getenv("YANDEX_CLOUD_FOLDER")
@@ -25,7 +26,9 @@ def request(prompt):
         return json.dumps({"request": prompt, "objects": []}, ensure_ascii=False)
     sid = r[0]
     rows = [dict(x) for x in cur.execute(q2, (sid,)).fetchall()]
-    return json.dumps({"request": prompt, "objects": rows}, ensure_ascii=False, indent=2)
+    return json.dumps(
+        {"request": prompt, "objects": rows}, ensure_ascii=False, indent=2
+    )
 
 
 def judge(response):
@@ -41,7 +44,7 @@ def judge(response):
     client = openai.OpenAI(
         api_key=YANDEX_CLOUD_API_KEY,
         base_url="https://rest-assistant.api.cloud.yandex.net/v1",
-        project=YANDEX_CLOUD_FOLDER
+        project=YANDEX_CLOUD_FOLDER,
     )
 
     response = client.responses.create(
@@ -54,5 +57,14 @@ def judge(response):
 
 
 if __name__ == "__main__":
-    open("tests/result.json", "w", encoding="utf8").write(request("погода во владивостоке сейчас"))
-    open("tests/judge_answer.json", "w", encoding="utf8").write(judge(open("tests/result.json", "r", encoding="utf8").read()))
+    from pathlib import Path
+
+    result_path = Path("tests/result.json")
+    judge_path = Path("tests/judge_answer.json")
+
+    result_content = request("погода во владивостоке сейчас")
+    result_path.write_text(result_content, encoding="utf8")
+
+    judge_input = result_path.read_text(encoding="utf8")
+    judge_content = judge(judge_input)
+    judge_path.write_text(judge_content, encoding="utf8")
