@@ -1,6 +1,6 @@
 import datetime
-import os
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from .base import CalendarTool
 
 # Placeholder for google libraries
@@ -10,7 +10,7 @@ from .base import CalendarTool
 # from googleapiclient.discovery import build
 
 class GoogleCalendarTool(CalendarTool):
-    def __init__(self, credentials_path: str = "credentials.json", token_path: str = "token.json"):
+    def __init__(self, credentials_path: str = "credentials.json", token_path: str = "token.json") -> None:
         self.credentials_path = credentials_path
         self.token_path = token_path
         self.service = None
@@ -22,7 +22,7 @@ class GoogleCalendarTool(CalendarTool):
     def description(self) -> str:
         return "Tool for interacting with Google Calendar (list, create events)."
 
-    def _authenticate(self):
+    def _authenticate(self) -> None:
         """
         Authenticates with Google API.
         Requires 'google-auth', 'google-auth-oauthlib', 'google-auth-httplib2', 'google-api-python-client'.
@@ -30,7 +30,7 @@ class GoogleCalendarTool(CalendarTool):
         # Implementation logic for OAuth2 flow
         pass
 
-    def list_events(self, start_time: datetime.datetime, end_time: datetime.datetime) -> List[Dict[str, Any]]:
+    def list_events(self, start_time: datetime.datetime, end_time: datetime.datetime) -> list[dict[str, Any]]:  # noqa: ARG002
         if not self.service:
             return [{"error": "Not authenticated"}]
         
@@ -38,7 +38,7 @@ class GoogleCalendarTool(CalendarTool):
         # events_result = self.service.events().list(...).execute()
         return []
 
-    def create_event(self, summary: str, start_time: datetime.datetime, end_time: datetime.datetime, description: Optional[str] = None) -> Dict[str, Any]:
+    def create_event(self, summary: str, start_time: datetime.datetime, end_time: datetime.datetime, description: str | None = None) -> dict[str, Any]:
         if not self.service:
             return {"error": "Not authenticated"}
 

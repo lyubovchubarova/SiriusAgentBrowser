@@ -1,12 +1,13 @@
 import os
-from typing import Any, Dict, Optional
+from typing import Any
+
 from .base import NotesTool
 
 # Placeholder for notion client
 # from notion_client import Client
 
 class NotionTool(NotesTool):
-    def __init__(self, api_token: Optional[str] = None):
+    def __init__(self, api_token: str | None = None):
         self.api_token = api_token or os.getenv("NOTION_API_TOKEN")
         self.client = None
         if self.api_token:
@@ -19,7 +20,7 @@ class NotionTool(NotesTool):
     def description(self) -> str:
         return "Tool for creating and updating pages in Notion."
 
-    def create_page(self, title: str, content: str) -> Dict[str, Any]:
+    def create_page(self, title: str, content: str) -> dict[str, Any]:
         if not self.api_token:
             return {"error": "NOTION_API_TOKEN not set"}
         
@@ -27,7 +28,7 @@ class NotionTool(NotesTool):
         # Implementation using self.client.pages.create(...)
         return {"status": "mock_created", "id": "mock_page_id"}
 
-    def append_content(self, page_id: str, content: str) -> Dict[str, Any]:
+    def append_content(self, page_id: str, content: str) -> dict[str, Any]:
         if not self.api_token:
             return {"error": "NOTION_API_TOKEN not set"}
 
