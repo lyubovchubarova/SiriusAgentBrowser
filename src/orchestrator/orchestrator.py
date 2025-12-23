@@ -693,6 +693,7 @@ class Orchestrator:
                         task=user_request,
                         history=history_text,
                         page_content=final_page_content,
+                        session_id=session_id,
                     )
                     final_output = summary
                     logger.info(f"Final Summary: {summary}")

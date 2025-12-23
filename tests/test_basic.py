@@ -1,4 +1,7 @@
-import sys, subprocess, sqlite3, json, shlex, os
+import json
+import shlex
+import sqlite3
+import subprocess
 
 
 def request(prompt):
@@ -6,7 +9,7 @@ def request(prompt):
     db = "logs.db"
     q1 = "SELECT session_id FROM action_logs ORDER BY id DESC LIMIT 1"
     q2 = "SELECT component, action_type, message, details FROM action_logs WHERE session_id = ?"
-    con = sqlite3.connect(db);
+    con = sqlite3.connect(db)
     con.row_factory = sqlite3.Row
     cur = con.cursor()
     r = cur.execute(q1).fetchone()

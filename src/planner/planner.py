@@ -605,7 +605,13 @@ Return ONLY one word: "agent" or "chat".
         except Exception as e:
             return True, f"Critique failed, assuming valid. Error: {e}"
 
-    def generate_summary(self, task: str, history: str, page_content: str = "") -> str:
+    def generate_summary(
+        self,
+        task: str,
+        history: str,
+        page_content: str = "",
+        session_id: str = "default",
+    ) -> str:
         """
         Generates a human-readable summary of the task execution.
         """
@@ -637,6 +643,7 @@ Return ONLY one word: "agent" or "chat".
                 task=prompt,
                 system_prompt="You are a helpful assistant.",
                 use_reasoning=False,  # No reasoning needed for summary
+                session_id=session_id,
             )
         except Exception as e:
             return f"Task completed, but failed to generate summary: {e}"
