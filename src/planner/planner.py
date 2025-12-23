@@ -9,6 +9,8 @@ from typing import Any, cast
 from openai import OpenAI
 from pydantic import ValidationError
 
+from src.logger_db import log_action, update_session_stats
+
 from .models import Plan
 
 SYSTEM_PROMPT = """
@@ -105,19 +107,49 @@ VISION / SCREENSHOTS:
 - If "needs_vision" is true, return an empty "steps" array. The system will call you again with a screenshot.
 
 Schema:
+You are a helpful assistant that plans browser automation tasks.
+Your goal is to provide a sequence of steps to fulfill the user's request.
+
+Please provide your response in valid JSON format.
+The JSON should include a 'reasoning' field in Russian, followed by the 'task' and 'steps'.
+
+Guidelines:
+- Keep the number of steps to 10 or fewer. If the task is complex, merge steps.
+- Ensure step_id starts from 1 and increases sequentially.
+- Available actions: navigate, click, type, scroll, extract, hover, inspect, wait, finish, search, ask_user.
+- Descriptions should be clear and imperative.
+  - For 'search', provide only the optimal search keywords (e.g., "python documentation").
+  - For 'navigate', provide the full URL.
+  - For 'click' or 'type', use the element ID if available in the context (e.g., "Click [E12] 'Search'").
+  - If no ID is visible, use the text description in single quotes.
+  - For 'inspect', describe what element or section you want to analyze.
+  - For 'wait', describe what you are waiting for.
+  - For 'ask_user', describe the question you want to ask the user.
+  - For 'finish', describe why the task is complete.
+- The 'reasoning' field should explain your plan in Russian.
+
+Navigation and Quality:
+- Use 'navigate' for direct URLs (e.g., 'https://youtube.com').
+- Use 'search' for finding information. Do not navigate to search engines manually.
+- Check if the task is already completed before adding more steps.
+- Prefer working in the current tab.
+
+If the DOM is not enough and you need to see the page, set "needs_vision": true and leave 'steps' empty.
+
+Response Schema:
 {
-  "reasoning": string, // Concise reasoning for the plan.
-  "task": string,
+  "reasoning": "Ваше рассуждение на русском языке",
+  "task": "The task description",
   "steps": [
     {
-      "step_id": number,
-      "action": "navigate" | "click" | "type" | "scroll" | "extract" | "hover" | "inspect" | "wait" | "finish",
-      "description": string,
-      "expected_result": string
+      "step_id": 1,
+      "action": "navigate",
+      "description": "Navigate to https://example.com",
+      "expected_result": "Page loaded"
     }
   ],
-  "estimated_time": number,
-  "needs_vision": boolean // Optional, default false. Set to true to request a screenshot.
+  "estimated_time": 5,
+  "needs_vision": false
 }
 """.strip()
 
@@ -191,15 +223,16 @@ class Planner:
         else:
             raise ValueError(f"Unknown provider: {provider}")
 
-    def classify_intent(self, user_prompt: str) -> str:
+    def classify_intent(self, user_prompt: str, session_id: str = "default") -> str:
         """
         Determines if the user prompt requires browser automation ('agent')
         or can be answered directly by the LLM ('chat').
         """
         prompt = f"""
-You are a classifier. Determine if the user's request requires using a web browser to perform actions (searching, navigating, clicking) OR if it can be answered directly by a language model.
+You are a helpful assistant that classifies user requests.
+Determine if the user's request requires using a web browser to perform actions (searching, navigating, clicking) OR if it can be answered directly by a language model.
 
-Rules:
+Guidelines:
 - Choose "agent" if the user asks to:
   - Search for something online.
   - Find information on a specific website.
@@ -214,7 +247,7 @@ Rules:
 
 User Request: "{user_prompt}"
 
-Return ONLY one word: "agent" or "chat".
+Please respond with only one word: "agent" or "chat".
 """.strip()
 
         try:
@@ -231,6 +264,20 @@ Return ONLY one word: "agent" or "chat".
                 messages=cast("Any", [{"role": "user", "content": prompt}]),
                 temperature=0.0,
             )
+
+            # Log usage
+            if response.usage:
+                total_tokens = response.usage.total_tokens
+                update_session_stats(session_id, "llm", total_tokens)
+                log_action(
+                    "Planner",
+                    "LLM_USAGE",
+                    f"Intent classification used {total_tokens} tokens",
+                    {"tokens": total_tokens, "model": model_to_use},
+                    session_id=session_id,
+                    tokens_used=total_tokens,
+                )
+
             content = response.choices[0].message.content
             result = content.strip().lower() if content else "agent"
             return "agent" if "agent" in result else "chat"
@@ -239,7 +286,7 @@ Return ONLY one word: "agent" or "chat".
             return "agent"  # Default to agent if unsure
 
     def generate_direct_answer(
-        self, user_prompt: str, stream_callback: Any = None
+        self, user_prompt: str, stream_callback: Any = None, session_id: str = "default"
     ) -> str:
         """
         Generates a direct answer for the user without using the browser.
@@ -247,7 +294,7 @@ Return ONLY one word: "agent" or "chat".
         messages = [
             {
                 "role": "system",
-                "content": "You are a helpful AI assistant running in 'Chat Mode'. You do not have active browser access in this mode. Answer the user's question directly using your internal knowledge. If the user needs real-time info or specific website actions, suggest they ask to 'search' or 'open' the site.",
+                "content": "You are a helpful AI assistant. Answer the user's question directly using your internal knowledge. If the user needs real-time info or specific website actions, suggest they ask to 'search' or 'open' the site.",
             },
             {"role": "user", "content": user_prompt},
         ]
@@ -268,20 +315,61 @@ Return ONLY one word: "agent" or "chat".
                         model=model_to_use,
                         messages=cast("Any", messages),
                         stream=True,
+                        stream_options=(
+                            {"include_usage": True}
+                            if self.provider == "openai"
+                            else None
+                        ),
                     ),
                 )
                 full_response = ""
+                usage_logged = False
                 for chunk in stream:
-                    if chunk.choices[0].delta.content:
+                    if chunk.choices and chunk.choices[0].delta.content:
                         content = chunk.choices[0].delta.content
                         full_response += content
                         stream_callback(content)
+
+                    # Try to capture usage from stream if available (OpenAI specific)
+                    if hasattr(chunk, "usage") and chunk.usage and not usage_logged:
+                        total_tokens = chunk.usage.total_tokens
+                        update_session_stats(session_id, "llm", total_tokens)
+                        log_action(
+                            "Planner",
+                            "LLM_USAGE",
+                            f"Direct answer used {total_tokens} tokens",
+                            {"tokens": total_tokens, "model": model_to_use},
+                            session_id=session_id,
+                            tokens_used=total_tokens,
+                        )
+                        usage_logged = True
+
+                # If usage wasn't in stream (e.g. Yandex or older OpenAI), we might miss it.
+                # For now, we just log the request count if usage is missing.
+                if not usage_logged:
+                    update_session_stats(session_id, "llm", 0)
+
                 return full_response
             else:
                 response = self.client.chat.completions.create(
                     model=model_to_use,
                     messages=cast("Any", messages),
                 )
+
+                if response.usage:
+                    total_tokens = response.usage.total_tokens
+                    update_session_stats(session_id, "llm", total_tokens)
+                    log_action(
+                        "Planner",
+                        "LLM_USAGE",
+                        f"Direct answer used {total_tokens} tokens",
+                        {"tokens": total_tokens, "model": model_to_use},
+                        session_id=session_id,
+                        tokens_used=total_tokens,
+                    )
+                else:
+                    update_session_stats(session_id, "llm", 0)
+
                 return response.choices[0].message.content or ""
         except Exception as e:
             return f"Error generating answer: {e}"
@@ -294,6 +382,7 @@ Return ONLY one word: "agent" or "chat".
         system_prompt: str | None = None,
         use_reasoning: bool = False,
         stream_callback: Any = None,
+        session_id: str = "default",
     ) -> str:
         user_content: Any
 
@@ -337,11 +426,18 @@ Return ONLY one word: "agent" or "chat".
                 "temperature": 0.2,
                 "max_tokens": 2000,
                 "stream": True,
+                "stream_options": {"include_usage": True},
             }
 
             if use_reasoning:
-                kwargs["extra_body"] = {"reasoningOptions": {"mode": "ENABLED_HIDDEN"}}
-                print("[PLANNER LOG] Reasoning enabled.")
+                # For Yandex, we use reasoningOptions.
+                # However, if the user wants to SEE the reasoning in the stream,
+                # we might need to handle it differently if the API doesn't stream the reasoning block.
+                # Current Yandex API (via OpenAI client) might not stream the hidden reasoning.
+                # So we will ask the model to output reasoning in the text instead.
+                # kwargs["extra_body"] = {"reasoningOptions": {"mode": "ENABLED_HIDDEN"}}
+                # print("[PLANNER LOG] Reasoning enabled (Hidden).")
+                pass  # Disable hidden reasoning, let prompt handle it.
 
             try:
                 response = self.client.chat.completions.create(**cast("Any", kwargs))
@@ -349,17 +445,60 @@ Return ONLY one word: "agent" or "chat".
                 full_response = ""
                 print("[PLANNER STREAM] ", end="", flush=True)
 
+                usage_logged = False
+
                 for chunk in response:
-                    if not chunk.choices:
-                        continue
-                    content = chunk.choices[0].delta.content
-                    if content:
+                    if chunk.choices and chunk.choices[0].delta.content:
+                        content = chunk.choices[0].delta.content
                         print(content, end="", flush=True)
                         full_response += content
                         if stream_callback:
                             stream_callback(content)
 
+                    if hasattr(chunk, "usage") and chunk.usage and not usage_logged:
+                        total_tokens = chunk.usage.total_tokens
+                        update_session_stats(session_id, "llm", total_tokens)
+                        log_action(
+                            "Planner",
+                            "LLM_USAGE",
+                            f"Plan generation used {total_tokens} tokens",
+                            {
+                                "tokens": total_tokens,
+                                "model": self.model,
+                                "system_prompt": sys_prompt,
+                                "prompt": str(user_content),
+                                "response": full_response,
+                            },
+                            session_id=session_id,
+                            tokens_used=total_tokens,
+                        )
+                        usage_logged = True
+
                 print("\n")  # Newline after stream
+
+                if not usage_logged:
+                    # Fallback estimation
+                    # Estimate: 1 token ~ 3-4 chars. Let's use 3 to be safe/conservative.
+                    input_len = len(sys_prompt) + len(str(user_content))
+                    output_len = len(full_response)
+                    estimated_tokens = (input_len + output_len) // 3
+                    update_session_stats(session_id, "llm", estimated_tokens)
+                    log_action(
+                        "Planner",
+                        "LLM_USAGE_ESTIMATED",
+                        f"Plan generation used ~{estimated_tokens} tokens (estimated)",
+                        {
+                            "tokens": estimated_tokens,
+                            "model": self.model,
+                            "estimated": True,
+                            "system_prompt": sys_prompt,
+                            "prompt": str(user_content),
+                            "response": full_response,
+                        },
+                        session_id=session_id,
+                        tokens_used=estimated_tokens,
+                    )
+
                 return full_response
 
             except Exception as e:
@@ -379,20 +518,61 @@ Return ONLY one word: "agent" or "chat".
                 temperature=0.2,
                 max_tokens=1000,
                 stream=True,
+                stream_options={"include_usage": True},
             )
 
             full_response = ""
             print("[PLANNER STREAM] ", end="", flush=True)
+            usage_logged = False
 
             for chunk in response:
-                if not chunk.choices:
-                    continue
-                content = chunk.choices[0].delta.content
-                if content:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
                     print(content, end="", flush=True)
                     full_response += content
                     if stream_callback:
                         stream_callback(content)
+
+                if hasattr(chunk, "usage") and chunk.usage and not usage_logged:
+                    total_tokens = chunk.usage.total_tokens
+                    update_session_stats(session_id, "llm", total_tokens)
+                    log_action(
+                        "Planner",
+                        "LLM_USAGE",
+                        f"Plan generation used {total_tokens} tokens",
+                        {
+                            "tokens": total_tokens,
+                            "model": self.model,
+                            "system_prompt": sys_prompt,
+                            "prompt": str(user_content),
+                            "response": full_response,
+                        },
+                        session_id=session_id,
+                        tokens_used=total_tokens,
+                    )
+                    usage_logged = True
+
+            if not usage_logged:
+                # Fallback estimation for OpenAI if usage is missing
+                input_len = len(sys_prompt) + len(str(user_content))
+                output_len = len(full_response)
+                estimated_tokens = (input_len + output_len) // 3
+                update_session_stats(session_id, "llm", estimated_tokens)
+                log_action(
+                    "Planner",
+                    "LLM_USAGE_ESTIMATED",
+                    f"Plan generation used ~{estimated_tokens} tokens (estimated)",
+                    {
+                        "tokens": estimated_tokens,
+                        "model": self.model,
+                        "estimated": True,
+                        "system_prompt": sys_prompt,
+                        "prompt": str(user_content),
+                        "response": full_response,
+                    },
+                    session_id=session_id,
+                    tokens_used=estimated_tokens,
+                )
 
             print("\n")
             return full_response
@@ -404,6 +584,7 @@ Return ONLY one word: "agent" or "chat".
         task: str,
         chat_history: list[dict[str, str]] | None = None,
         status_callback: Any = None,
+        session_id: str = "default",
     ) -> Plan:
         prompt = f"Task: {task}\n\nCurrent State: New Browser Session (Empty Tab). You need to navigate to the target site."
         if chat_history:
@@ -416,7 +597,9 @@ Return ONLY one word: "agent" or "chat".
 
             prompt += f"\n\nCONTEXT FROM CHAT HISTORY:\n{history_str}\n\nUse this history to understand the user's intent better (e.g. if they refer to previous results), but focus on executing the current Task."
 
-        return self._generate_plan_with_retry(prompt, stream_callback=status_callback)
+        return self._generate_plan_with_retry(
+            prompt, stream_callback=status_callback, session_id=session_id
+        )
 
     def update_plan(
         self,
@@ -428,6 +611,7 @@ Return ONLY one word: "agent" or "chat".
         history: str = "",
         screenshot_path: str | None = None,
         status_callback: Any = None,
+        session_id: str = "default",
     ) -> Plan:
         """
         Generates a new plan (remaining steps) based on the current state.
@@ -467,7 +651,10 @@ Return ONLY one word: "agent" or "chat".
             context += "\nA screenshot of the current page is attached. Use it to resolve ambiguity if the DOM is insufficient.\n"
 
         return self._generate_plan_with_retry(
-            context, image_path=screenshot_path, stream_callback=status_callback
+            context,
+            image_path=screenshot_path,
+            stream_callback=status_callback,
+            session_id=session_id,
         )
 
     def _generate_plan_with_retry(
@@ -475,6 +662,7 @@ Return ONLY one word: "agent" or "chat".
         user_prompt: str,
         image_path: str | None = None,
         stream_callback: Any = None,
+        session_id: str = "default",
     ) -> Plan:
         last_raw = ""
         last_err = ""
@@ -499,8 +687,9 @@ Return ONLY one word: "agent" or "chat".
                     user_prompt,
                     extra_user_text=extra,
                     image_path=image_path,
-                    use_reasoning=True,  # Enable reasoning for planning
+                    use_reasoning=True,  # Enable reasoning to show thought process
                     stream_callback=stream_callback,
+                    session_id=session_id,
                 )
                 last_raw = raw_text
             except Exception as e:
@@ -531,7 +720,9 @@ Return ONLY one word: "agent" or "chat".
             raw_output=last_raw,
         )
 
-    def critique_plan(self, plan: Plan, context: str) -> tuple[bool, str]:
+    def critique_plan(
+        self, plan: Plan, context: str, session_id: str | None = None
+    ) -> tuple[bool, str]:
         """
         Critiques the generated plan. Returns (is_valid, critique_message).
         """
@@ -558,7 +749,8 @@ Return ONLY one word: "agent" or "chat".
             response = self._ask_llm(
                 task=prompt,
                 system_prompt="You are a critical reviewer.",
-                use_reasoning=True,  # Reasoning helps critique
+                use_reasoning=False,  # Disable reasoning for faster critique
+                session_id=session_id or "default",
             )
             if "INVALID" in response:
                 return False, response
@@ -566,7 +758,13 @@ Return ONLY one word: "agent" or "chat".
         except Exception as e:
             return True, f"Critique failed, assuming valid. Error: {e}"
 
-    def generate_summary(self, task: str, history: str, page_content: str = "") -> str:
+    def generate_summary(
+        self,
+        task: str,
+        history: str,
+        page_content: str = "",
+        session_id: str = "default",
+    ) -> str:
         """
         Generates a human-readable summary of the task execution.
         """
@@ -581,15 +779,15 @@ Return ONLY one word: "agent" or "chat".
 
         Please provide a concise, human-readable answer or summary of the result.
 
-        IMPORTANT RULES FOR SUMMARY:
+        Guidelines for the summary:
         1. If the user asked to "find", "open", "read", or "navigate to" a page/article, and the agent successfully opened it:
-           - Just confirm that the page is open.
+           - Confirm that the page is open.
            - Briefly mention the title or topic of the page to confirm it's the right one.
-           - DO NOT copy the full text of the article into the chat unless explicitly asked (e.g. "summarize", "copy text").
-        2. If the user asked a specific question (e.g., "what is the price?", "who is the CEO?"):
+           - Avoid copying the full text of the article into the chat unless explicitly asked.
+        2. If the user asked a specific question:
            - Extract the specific answer from the page content.
         3. Keep it short and natural.
-        4. Do not mention internal steps like "clicked element E12" unless necessary for context.
+        4. Avoid mentioning internal steps like "clicked element E12" unless necessary for context.
         """
 
         try:
@@ -598,6 +796,7 @@ Return ONLY one word: "agent" or "chat".
                 task=prompt,
                 system_prompt="You are a helpful assistant.",
                 use_reasoning=False,  # No reasoning needed for summary
+                session_id=session_id,
             )
         except Exception as e:
             return f"Task completed, but failed to generate summary: {e}"

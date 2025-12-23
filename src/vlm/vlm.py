@@ -367,6 +367,7 @@ Example: [1, 3, 5, 9] (where 9 is the button)
         page: Page,
         execution_result: str,
         stream_callback: Any = None,
+        session_id: str = "default",
     ) -> tuple[bool, str]:
         """
         Проверяет, был ли шаг выполнен успешно.
@@ -387,6 +388,7 @@ Example: [1, 3, 5, 9] (where 9 is the button)
                     screenshot_path,
                     step.expected_result,
                     stream_callback=stream_callback,
+                    session_id=session_id,
                 )
                 if not is_valid:
                     return False, f"VLM Verification Failed: {reason}"
@@ -430,6 +432,7 @@ Example: [1, 3, 5, 9] (where 9 is the button)
         page: Page,
         check_stop_callback: Any = None,
         stream_callback: Any = None,
+        session_id: str = "default",
     ) -> str:
         """
         Выполняет один шаг плана.
@@ -602,6 +605,18 @@ Example: [1, 3, 5, 9] (where 9 is the button)
 
                 return "Failed to navigate: No URL found"
 
+            elif step.action == "search":
+                query = step.description
+                # Basic cleanup
+                query = query.strip().strip("\"'")
+                search_url = f"https://www.google.com/search?q={query}"
+                try:
+                    page.goto(search_url, wait_until="domcontentloaded")
+                    self._handle_popups(page)
+                    return f"Searched for '{query}'"
+                except Exception as e:
+                    return f"Failed to search for '{query}': {e}"
+
             elif step.action == "solve_captcha":
                 print("Explicitly solving CAPTCHA requested by Planner.")
                 self._solve_captcha(page)
@@ -667,6 +682,7 @@ Example: [1, 3, 5, 9] (where 9 is the button)
                             screenshot_path,
                             "Click on the search input field or text box",
                             stream_callback=stream_callback,
+                            session_id=session_id,
                         )
                         print(f"[VLM LOG] VLM Response for 'type' target: {vlm_resp}")
                         match = re.search(r":id:(\d+):", vlm_resp)
@@ -924,6 +940,7 @@ Example: [1, 3, 5, 9] (where 9 is the button)
                                 screenshot_path,
                                 step.description,
                                 stream_callback=stream_callback,
+                                session_id=session_id,
                             )
                             print(
                                 f"[VLM LOG] VLM SoM Response (Attempt {attempt + 1}): {vlm_resp}"
@@ -1018,6 +1035,7 @@ Example: [1, 3, 5, 9] (where 9 is the button)
                             screenshot_path,
                             step.description,
                             stream_callback=stream_callback,
+                            session_id=session_id,
                         )
                         print(f"[VLM LOG] VLM Response for 'hover' target: {vlm_resp}")
                         match = re.search(r":id:(\d+):", vlm_resp)
@@ -1134,6 +1152,7 @@ Example: [1, 3, 5, 9] (where 9 is the button)
                             screenshot_path,
                             step.description,
                             stream_callback=stream_callback,
+                            session_id=session_id,
                         )
                         return f"VLM Extracted Data: {extraction_result}"
                     except Exception as e:

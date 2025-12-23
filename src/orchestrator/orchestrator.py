@@ -98,34 +98,20 @@ class Orchestrator:
             print(f"[STATUS] {msg}")
 
         try:
-            # 0. Intent Classification
-            report_status("Analyzing request...")
-            intent = self.planner.classify_intent(user_request)
-            logger.info(f"Intent classified as: {intent}")
-            log_action(
-                "Planner",
-                "INTENT_CLASSIFIED",
-                f"Intent: {intent}",
-                {"intent": intent},
-                session_id=session_id,
-            )
+            # 0. Intent Classification - DISABLED (Always Agent Mode)
+            # report_status("Analyzing request...")
+            # intent = self.planner.classify_intent(user_request, session_id=session_id)
+            # logger.info(f"Intent classified as: {intent}")
 
-            if intent == "chat":
-                report_status("Generating answer...")
-                # For chat, we stream the answer directly to the stream_callback (which goes to the thinking block)
-                # OR we just return it.
-                # The user wants "YandexGPT should answer itself".
-                # If we use stream_callback, it appears in the "Thinking" block.
-                # If we return it, it appears in the "Agent" block.
-                # Let's do both: stream it for "liveness" (optional) and return it.
-                # Actually, for a direct chat, the "Thinking" block might be confusing if it contains the answer.
-                # But the user asked for "reasoning" to be collapsible.
-                # Let's just generate the answer and return it.
+            # Always assume agent mode
+            # intent = "agent"
 
-                answer = self.planner.generate_direct_answer(
-                    user_request, stream_callback=None
-                )
-                return answer
+            # if intent == "chat":
+            #     report_status("Generating answer...")
+            #     answer = self.planner.generate_direct_answer(
+            #         user_request, stream_callback=None, session_id=session_id
+            #     )
+            #     return answer
 
             # 1. Планирование
             logger.info("Creating plan...")
@@ -139,7 +125,10 @@ class Orchestrator:
             initial_state_context = "Current State: New Browser Session (Empty Tab). You need to navigate to the target site."
 
             plan: Plan = self.planner.create_plan(
-                user_request, chat_history, status_callback=stream_callback
+                user_request,
+                chat_history,
+                status_callback=stream_callback,
+                session_id=session_id,
             )
 
             # Check if initial plan is empty or just "finish"
@@ -155,6 +144,7 @@ class Orchestrator:
                     + f"\n\n{initial_state_context}\nCRITICAL: You MUST generate navigation steps.",
                     chat_history,
                     status_callback=stream_callback,
+                    session_id=session_id,
                 )
 
             print(f"[PLANNER LOG] Plan received: {plan}")
@@ -344,36 +334,21 @@ class Orchestrator:
                             f"Yandex Search API successful. Found {len(api_results)} results."
                         )
 
-                        # Generate HTML for the agent to "see"
-                        html_content = "<html><body><h1>Search Results</h1><ul>"
-                        text_summary = f"Search Results for '{step.description}':\n"
+                        # Generate text summary for the agent to analyze directly
+                        text_summary = (
+                            f"Search Results for '{step.description}' (via API):\n"
+                        )
 
                         for item in api_results:
                             title = item.get("title", "No Title")
                             url = item.get("url", "#")
                             snippet = item.get("snippet", "")
+                            text_summary += f"- [Title: {title}] [URL: {url}]\n  Snippet: {snippet}\n"
 
-                            html_content += (
-                                f"<li><a href='{url}'>{title}</a><p>{snippet}</p></li>"
-                            )
-                            text_summary += f"- {title}: {snippet} ({url})\n"
+                        # Explicit instruction to the planner
+                        text_summary += "\nNOTE: The browser did NOT navigate to these results. Use the URLs above to 'navigate' to the most relevant page, or 'finish' if the answer is in the snippets."
 
-                        html_content += "</ul></body></html>"
-
-                        # Save to a temp file and navigate
-                        try:
-                            temp_dir = Path("temp")
-                            temp_dir.mkdir(exist_ok=True)
-                            search_file = temp_dir / "search_results.html"
-                            search_file.write_text(html_content, encoding="utf-8")
-
-                            page.goto(search_file.resolve().as_uri())
-                            result = text_summary
-                        except Exception as e:
-                            logger.error(f"Failed to render search results: {e}")
-                            # Fallback to manual if rendering fails?
-                            # Or just return text summary.
-                            result = text_summary
+                        result = text_summary
 
                     else:
                         logger.warning(
@@ -451,6 +426,7 @@ class Orchestrator:
                         page,
                         check_stop_callback=lambda: self._stop_requested,
                         stream_callback=stream_callback,
+                        session_id=session_id,
                     )
 
                 results.append(f"Step {step.step_id}: {result}")
@@ -578,9 +554,14 @@ class Orchestrator:
 
                     history_str += f"{step_desc} -> Result: {result_text}\n"
 
-                print(
-                    f"\n[PLANNER LOG] Updating plan based on history ({len(execution_history)} steps):\n{history_str}"
-                )
+                try:
+                    print(
+                        f"\n[PLANNER LOG] Updating plan based on history ({len(execution_history)} steps):\n{history_str}"
+                    )
+                except UnicodeEncodeError:
+                    print(
+                        f"\n[PLANNER LOG] Updating plan based on history ({len(execution_history)} steps):\n{history_str.encode('ascii', 'replace').decode('ascii')}"
+                    )
 
                 # Simple cycle detection
                 # If the exact same action description and result happened in the last 3 steps (excluding current), warn
@@ -664,6 +645,7 @@ class Orchestrator:
                         dom_elements=dom_str,
                         history=full_context_str,
                         status_callback=stream_callback,
+                        session_id=session_id,
                     )
                     print(f"[PLANNER LOG] Updated Plan: {new_plan}")
 
@@ -697,6 +679,7 @@ class Orchestrator:
                             history=full_context_str,
                             screenshot_path=real_screenshot_path,
                             status_callback=stream_callback,
+                            session_id=session_id,
                         )
 
                     # 3. Critique Step (Self-Correction)
@@ -706,7 +689,7 @@ class Orchestrator:
                         and new_plan.steps[0].action == "extract"
                     ):
                         is_valid, critique = self.planner.critique_plan(
-                            new_plan, full_context_str
+                            new_plan, full_context_str, session_id=session_id
                         )
                         if not is_valid:
                             logger.warning(
@@ -728,6 +711,7 @@ class Orchestrator:
                                 screenshot_path=(
                                     screenshot_path if new_plan.needs_vision else None
                                 ),
+                                session_id=session_id,
                             )
 
                     # Check if task is completed
@@ -757,6 +741,7 @@ class Orchestrator:
                                 dom_elements=dom_str,
                                 history=full_context_str,
                                 status_callback=stream_callback,
+                                session_id=session_id,
                             )
                         else:
                             logger.info("Planner indicates task completion.")
@@ -775,21 +760,31 @@ class Orchestrator:
             final_output = ""
             try:
                 history_text = "\n".join(results)
-                # Use generate_direct_answer for a better formatted response
-                context_for_answer = (
-                    f"Task: {user_request}\n\nExecution History:\n{history_text}"
-                )
-                if final_page_content:
-                    context_for_answer += f"\n\nFinal Page Content (Excerpt):\n{final_page_content[:5000]}"
 
-                summary = self.planner.generate_direct_answer(
-                    context_for_answer, stream_callback=None
-                )
-                final_output = summary
-                logger.info(f"Final Summary: {summary}")
+                if not results:
+                    final_output = "Не удалось выполнить ни одного действия. Возможно, возникла ошибка при планировании."
+                    logger.warning("No results to summarize.")
+                else:
+                    summary = self.planner.generate_summary(
+                        task=user_request,
+                        history=history_text,
+                        page_content=final_page_content,
+                        session_id=session_id,
+                    )
+                    final_output = summary
+                    logger.info(f"Final Summary: {summary}")
             except Exception as e:
                 logger.error(f"Failed to generate summary: {e}")
                 final_output = "Задача выполнена, но не удалось сгенерировать отчет."
+
+            # Log the final answer
+            log_action(
+                "Orchestrator",
+                "FINAL_ANSWER",
+                "Task completed",
+                {"answer": final_output},
+                session_id=session_id,
+            )
 
             # Save successful experience to memory
             if execution_history and "Failed" not in execution_history[-1]["result"]:
@@ -803,7 +798,15 @@ class Orchestrator:
 
         except Exception as e:
             logger.error(f"Error processing request: {e}", exc_info=True)
-            return f"Error: {e}"
+            error_msg = f"Error: {e}"
+            log_action(
+                "Orchestrator",
+                "FINAL_ANSWER",
+                "Task failed with error",
+                {"answer": error_msg, "error": str(e)},
+                session_id=session_id,
+            )
+            return error_msg
         finally:
             # self.close_browser()
             pass
