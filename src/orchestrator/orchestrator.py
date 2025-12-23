@@ -1,15 +1,15 @@
 import logging
 import uuid
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from src.browser.browser_controller import BrowserController, BrowserOptions
 from src.browser.debug_wrapper import DebugWrapper
+from src.logger_db import log_action
 from src.memory.long_term_memory import LongTermMemory
 from src.planner.planner import Planner
 from src.tools.search import yandex_search
 from src.vlm.vlm import VisionAgent
-from src.logger_db import log_action
-from pathlib import Path
 
 if TYPE_CHECKING:
     from src.planner.models import Plan
@@ -227,7 +227,7 @@ class Orchestrator:
                 if step.action == "ask_user":
                     logger.info(f"Asking user: {step.description}")
                     report_status(f"Waiting for user input: {step.description}")
-                    
+
                     if user_input_callback:
                         try:
                             user_answer = user_input_callback(step.description)
@@ -241,7 +241,7 @@ class Orchestrator:
                             user_answer = input("Your answer: ")
                         except EOFError:
                             user_answer = "No answer provided."
-                    
+
                     result = f"User answered: {user_answer}"
                     logger.info(f"User answer received: {user_answer}")
 
@@ -501,11 +501,10 @@ class Orchestrator:
                     )
                     result_text = h["result"]
 
-                    if not is_recent:
+                    if not is_recent and len(result_text) > 150:
                         # Summarize old results to avoid polluting context with stale data
                         # especially large extracted text or DOM dumps
-                        if len(result_text) > 150:
-                            result_text = result_text[:150] + "... (history truncated)"
+                        result_text = result_text[:150] + "... (history truncated)"
 
                     history_str += f"{step_desc} -> Result: {result_text}\n"
 

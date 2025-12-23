@@ -1,13 +1,12 @@
-import sqlite3
 import json
-import datetime
+import sqlite3
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 DB_PATH = Path("logs.db")
 
 
-def init_db():
+def init_db() -> None:
     """Initialize the database and create tables if they don't exist."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -35,9 +34,9 @@ def log_action(
     component: str,
     action_type: str,
     message: str,
-    details: Optional[dict[str, Any]] = None,
+    details: dict[str, Any] | None = None,
     session_id: str = "default",
-):
+) -> None:
     """
     Log an action to the database.
 
