@@ -1,8 +1,39 @@
 document.addEventListener("DOMContentLoaded", () => {
+	const themeToggle = document.getElementById("theme-toggle");
+
+	// загрузка сохранённой темы
+	const savedTheme = localStorage.getItem("theme");
+	if (savedTheme === "dark") {
+		document.body.classList.add("dark");
+		themeToggle.textContent = "☀️";
+	} else {
+		themeToggle.textContent = "🌙";
+	}
+
+	// переключатель
+	themeToggle.addEventListener("click", () => {
+		document.body.classList.toggle("dark");
+		const isDark = document.body.classList.contains("dark");
+
+		localStorage.setItem("theme", isDark ? "dark" : "light");
+		themeToggle.textContent = isDark ? "☀️" : "🌙";
+	});
+
 	const chatContainer = document.getElementById("chat-container");
 	const promptInput = document.getElementById("prompt-input");
 	const sendBtn = document.getElementById("send-btn");
 	const stopBtn = document.getElementById("stop-btn");
+	const clearHistoryBtn = document.getElementById("clear-history");
+
+	// Clear history handler
+	clearHistoryBtn.addEventListener("click", () => {
+		chatHistory = [];
+		chatContainer.innerHTML = `
+			<div class="message agent-message">
+				Привет! Я Sirius Agent. Чем могу помочь в браузере?
+			</div>
+		`;
+	});
 
 	// Configuration
 	const API_URL = "http://127.0.0.1:8000/chat";
@@ -13,6 +44,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	let currentThinkingDiv = null;
 	let isConnected = false;
 	let evtSource = null;
+	let chatHistory = []; // Store chat history
 
 	// Initial state
 	sendBtn.disabled = true;
@@ -57,7 +89,11 @@ document.addEventListener("DOMContentLoaded", () => {
 	function addMessage(text, type) {
 		const div = document.createElement("div");
 		div.className = `message ${type}-message`;
-		div.textContent = text;
+		if (type === "agent" && typeof marked !== "undefined") {
+			div.innerHTML = marked.parse(text);
+		} else {
+			div.textContent = text;
+		}
 		chatContainer.appendChild(div);
 		chatContainer.scrollTop = chatContainer.scrollHeight;
 	}
@@ -78,6 +114,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
 	function getOrCreateThinkingDiv() {
 		if (!currentThinkingDiv) {
+			// Collapse all previous thinking containers to keep UI clean
+			document.querySelectorAll(".thinking-content").forEach((el) => {
+				if (!el.classList.contains("collapsed")) {
+					el.classList.add("collapsed");
+					// Update icon
+					const header = el.previousElementSibling;
+					if (header) {
+						const icon = header.querySelector(".toggle-icon");
+						if (icon) icon.style.transform = "rotate(-90deg)";
+					}
+				}
+			});
+
 			// Create container
 			const container = document.createElement("div");
 			container.className = "thinking-container";
@@ -163,13 +212,19 @@ document.addEventListener("DOMContentLoaded", () => {
 		stopBtn.style.display = "flex";
 		addStatus("Агент думает...");
 
+		// Add user message to history
+		chatHistory.push({ role: "user", content: text });
+
 		try {
 			const response = await fetch(API_URL, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
 				},
-				body: JSON.stringify({ query: text }),
+				body: JSON.stringify({
+					query: text,
+					chat_history: chatHistory,
+				}),
 			});
 
 			const data = await response.json();
@@ -180,6 +235,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
 			if (data.status === "success") {
 				addMessage(data.result, "agent");
+				// Add agent response to history
+				chatHistory.push({ role: "assistant", content: data.result });
 			} else {
 				const errorMsg = data.message || data.detail || "Unknown error";
 				addMessage(`Ошибка: ${errorMsg}`, "agent");
