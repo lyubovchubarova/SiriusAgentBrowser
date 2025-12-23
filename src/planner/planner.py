@@ -353,7 +353,13 @@ Please respond with only one word: "agent" or "chat".
                             "Planner",
                             "LLM_USAGE",
                             f"Plan generation used {total_tokens} tokens",
-                            {"tokens": total_tokens, "model": self.model},
+                            {
+                                "tokens": total_tokens,
+                                "model": self.model,
+                                "system_prompt": sys_prompt,
+                                "prompt": str(user_content),
+                                "response": full_response,
+                            },
                             session_id=session_id,
                             tokens_used=total_tokens,
                         )
@@ -376,6 +382,9 @@ Please respond with only one word: "agent" or "chat".
                             "tokens": estimated_tokens,
                             "model": self.model,
                             "estimated": True,
+                            "system_prompt": sys_prompt,
+                            "prompt": str(user_content),
+                            "response": full_response,
                         },
                         session_id=session_id,
                         tokens_used=estimated_tokens,
@@ -422,14 +431,39 @@ Please respond with only one word: "agent" or "chat".
                         "Planner",
                         "LLM_USAGE",
                         f"Plan generation used {total_tokens} tokens",
-                        {"tokens": total_tokens, "model": self.model},
+                        {
+                            "tokens": total_tokens,
+                            "model": self.model,
+                            "system_prompt": sys_prompt,
+                            "prompt": str(user_content),
+                            "response": full_response,
+                        },
                         session_id=session_id,
                         tokens_used=total_tokens,
                     )
                     usage_logged = True
 
             if not usage_logged:
-                update_session_stats(session_id, "llm", 0)
+                # Fallback estimation for OpenAI if usage is missing
+                input_len = len(sys_prompt) + len(str(user_content))
+                output_len = len(full_response)
+                estimated_tokens = (input_len + output_len) // 3
+                update_session_stats(session_id, "llm", estimated_tokens)
+                log_action(
+                    "Planner",
+                    "LLM_USAGE_ESTIMATED",
+                    f"Plan generation used ~{estimated_tokens} tokens (estimated)",
+                    {
+                        "tokens": estimated_tokens,
+                        "model": self.model,
+                        "estimated": True,
+                        "system_prompt": sys_prompt,
+                        "prompt": str(user_content),
+                        "response": full_response,
+                    },
+                    session_id=session_id,
+                    tokens_used=estimated_tokens,
+                )
 
             print("\n")
             return full_response

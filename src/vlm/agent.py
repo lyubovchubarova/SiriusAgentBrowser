@@ -119,7 +119,13 @@ class VLMAgent:
                             "VLM",
                             "VLM_USAGE",
                             f"VLM request used {total_tokens} tokens",
-                            {"tokens": total_tokens, "model": self.model},
+                            {
+                                "tokens": total_tokens,
+                                "model": self.model,
+                                "system_prompt": system_prompt,
+                                "prompt": user_prompt,
+                                "response": full_response,
+                            },
                             session_id=session_id,
                             tokens_used=total_tokens,
                         )
@@ -127,7 +133,9 @@ class VLMAgent:
 
                 if not usage_logged:
                     # Fallback estimation
-                    input_len = len(system_prompt) + len(user_prompt) + 1000  # +1000 for image overhead estimate
+                    input_len = (
+                        len(system_prompt) + len(user_prompt) + 1000
+                    )  # +1000 for image overhead estimate
                     output_len = len(full_response)
                     estimated_tokens = (input_len + output_len) // 3
                     update_session_stats(session_id, "vlm", estimated_tokens)
@@ -135,7 +143,14 @@ class VLMAgent:
                         "VLM",
                         "VLM_USAGE_ESTIMATED",
                         f"VLM request used ~{estimated_tokens} tokens (estimated)",
-                        {"tokens": estimated_tokens, "model": self.model, "estimated": True},
+                        {
+                            "tokens": estimated_tokens,
+                            "model": self.model,
+                            "estimated": True,
+                            "system_prompt": system_prompt,
+                            "prompt": user_prompt,
+                            "response": full_response,
+                        },
                         session_id=session_id,
                         tokens_used=estimated_tokens,
                     )
