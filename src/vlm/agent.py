@@ -99,11 +99,7 @@ class VLMAgent:
                     temperature=0.1,
                     max_tokens=1000,
                     stream=True,  # Enable streaming
-                    stream_options=(
-                        {"include_usage": True}
-                        if "gpt-4" in self.model or "gpt-3.5" in self.model
-                        else None
-                    ),
+                    stream_options={"include_usage": True},
                 )
 
                 full_response = ""
@@ -130,7 +126,19 @@ class VLMAgent:
                         usage_logged = True
 
                 if not usage_logged:
-                    update_session_stats(session_id, "vlm", 0)
+                    # Fallback estimation
+                    input_len = len(system_prompt) + len(user_prompt) + 1000  # +1000 for image overhead estimate
+                    output_len = len(full_response)
+                    estimated_tokens = (input_len + output_len) // 3
+                    update_session_stats(session_id, "vlm", estimated_tokens)
+                    log_action(
+                        "VLM",
+                        "VLM_USAGE_ESTIMATED",
+                        f"VLM request used ~{estimated_tokens} tokens (estimated)",
+                        {"tokens": estimated_tokens, "model": self.model, "estimated": True},
+                        session_id=session_id,
+                        tokens_used=estimated_tokens,
+                    )
 
                 return full_response
 

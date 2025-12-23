@@ -341,6 +341,7 @@ Return ONLY one word: "agent" or "chat".
                 "temperature": 0.2,
                 "max_tokens": 2000,
                 "stream": True,
+                "stream_options": {"include_usage": True},
             }
 
             if use_reasoning:
@@ -359,21 +360,47 @@ Return ONLY one word: "agent" or "chat".
                 full_response = ""
                 print("[PLANNER STREAM] ", end="", flush=True)
 
-                # Yandex doesn't support usage in stream yet via standard OpenAI client easily without stream_options
-                # But let's try to count requests at least.
-                update_session_stats(session_id, "llm", 0)
+                usage_logged = False
 
                 for chunk in response:
-                    if not chunk.choices:
-                        continue
-                    content = chunk.choices[0].delta.content
-                    if content:
+                    if chunk.choices and chunk.choices[0].delta.content:
+                        content = chunk.choices[0].delta.content
                         print(content, end="", flush=True)
                         full_response += content
                         if stream_callback:
                             stream_callback(content)
 
+                    if hasattr(chunk, "usage") and chunk.usage and not usage_logged:
+                        total_tokens = chunk.usage.total_tokens
+                        update_session_stats(session_id, "llm", total_tokens)
+                        log_action(
+                            "Planner",
+                            "LLM_USAGE",
+                            f"Plan generation used {total_tokens} tokens",
+                            {"tokens": total_tokens, "model": self.model},
+                            session_id=session_id,
+                            tokens_used=total_tokens,
+                        )
+                        usage_logged = True
+
                 print("\n")  # Newline after stream
+
+                if not usage_logged:
+                    # Fallback estimation
+                    # Estimate: 1 token ~ 3-4 chars. Let's use 3 to be safe/conservative.
+                    input_len = len(sys_prompt) + len(str(user_content))
+                    output_len = len(full_response)
+                    estimated_tokens = (input_len + output_len) // 3
+                    update_session_stats(session_id, "llm", estimated_tokens)
+                    log_action(
+                        "Planner",
+                        "LLM_USAGE_ESTIMATED",
+                        f"Plan generation used ~{estimated_tokens} tokens (estimated)",
+                        {"tokens": estimated_tokens, "model": self.model, "estimated": True},
+                        session_id=session_id,
+                        tokens_used=estimated_tokens,
+                    )
+
                 return full_response
 
             except Exception as e:
