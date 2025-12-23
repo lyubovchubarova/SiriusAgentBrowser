@@ -1,13 +1,12 @@
-import sqlite3
 import json
-import datetime
+import sqlite3
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 DB_PATH = Path("logs.db")
 
 
-def init_db():
+def init_db() -> None:
     """Initialize the database and create tables if they don't exist."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -46,7 +45,7 @@ def init_db():
     conn.close()
 
 
-def update_session_stats(session_id: str, request_type: str, tokens: int = 0):
+def update_session_stats(session_id: str, request_type: str, tokens: int = 0) -> None:
     """
     Update session statistics.
 
@@ -67,7 +66,7 @@ def update_session_stats(session_id: str, request_type: str, tokens: int = 0):
         if request_type.lower() == "llm":
             cursor.execute(
                 """
-                UPDATE session_stats 
+                UPDATE session_stats
                 SET llm_requests_count = llm_requests_count + 1,
                     total_tokens = total_tokens + ?,
                     last_update = CURRENT_TIMESTAMP
@@ -78,7 +77,7 @@ def update_session_stats(session_id: str, request_type: str, tokens: int = 0):
         elif request_type.lower() == "vlm":
             cursor.execute(
                 """
-                UPDATE session_stats 
+                UPDATE session_stats
                 SET vlm_requests_count = vlm_requests_count + 1,
                     total_tokens = total_tokens + ?,
                     last_update = CURRENT_TIMESTAMP
@@ -97,10 +96,10 @@ def log_action(
     component: str,
     action_type: str,
     message: str,
-    details: Optional[dict[str, Any]] = None,
+    details: dict[str, Any] | None = None,
     session_id: str = "default",
     tokens_used: int = 0,
-):
+) -> None:
     """
     Log an action to the database.
 

@@ -9,6 +9,7 @@ from openai import OpenAI
 from pydantic import ValidationError
 
 from src.logger_db import log_action, update_session_stats
+
 from .models import Plan
 
 SYSTEM_PROMPT = """
@@ -596,7 +597,7 @@ Return ONLY one word: "agent" or "chat".
                 task=prompt,
                 system_prompt="You are a critical reviewer.",
                 use_reasoning=False,  # Disable reasoning for faster critique
-                session_id=session_id,
+                session_id=session_id or "default",
             )
             if "INVALID" in response:
                 return False, response

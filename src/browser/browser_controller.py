@@ -556,7 +556,7 @@ class BrowserController:
             if x2 <= x1 or y2 <= y1:
                 continue
 
-            draw.rectangle([x1, y1, x2, y2], outline=(255, 0, 0, 255), width=3)
+            draw.rectangle((x1, y1, x2, y2), outline=(255, 0, 0, 255), width=3)
 
             label = el["id"]
             # textbbox returns (l,t,r,b)
@@ -569,7 +569,7 @@ class BrowserController:
             lx2 = clamp_px(int(x1 + tw + pad * 2), 0, W - 1)
             ly2 = clamp_px(int(ly1 + th + pad * 2), 0, H - 1)
 
-            draw.rectangle([lx1, ly1, lx2, ly2], fill=(255, 0, 0, 200))
+            draw.rectangle((lx1, ly1, lx2, ly2), fill=(255, 0, 0, 200))
             draw.text(
                 (lx1 + pad, ly1 + pad), label, font=font, fill=(255, 255, 255, 255)
             )
