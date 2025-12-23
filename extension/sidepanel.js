@@ -40,9 +40,11 @@ document.addEventListener("DOMContentLoaded", () => {
 	const STREAM_URL = "http://127.0.0.1:8000/stream";
 	const STOP_URL = "http://127.0.0.1:8000/stop";
 	const HEALTH_URL = "http://127.0.0.1:8000/health";
+	const ANSWER_URL = "http://127.0.0.1:8000/answer";
 
 	let currentThinkingDiv = null;
 	let isConnected = false;
+	let isWaitingForAnswer = false;
 	let evtSource = null;
 	let chatHistory = []; // Store chat history
 
@@ -181,6 +183,14 @@ document.addEventListener("DOMContentLoaded", () => {
 					chatContainer.scrollTop = chatContainer.scrollHeight;
 				} else if (data.type === "status") {
 					addStatus(data.content);
+				} else if (data.type === "question") {
+					addMessage(data.content, "agent");
+					isWaitingForAnswer = true;
+					promptInput.disabled = false;
+					sendBtn.disabled = false;
+					promptInput.focus();
+					promptInput.placeholder = "Введите ответ...";
+					addStatus("Ожидание ответа пользователя...");
 				}
 			} catch (e) {
 				console.error("Error parsing stream event:", e);
@@ -199,6 +209,30 @@ document.addEventListener("DOMContentLoaded", () => {
 	async function sendMessage() {
 		const text = promptInput.value.trim();
 		if (!text) return;
+
+		if (isWaitingForAnswer) {
+			addMessage(text, "user");
+			promptInput.value = "";
+			promptInput.disabled = true;
+			sendBtn.disabled = true;
+
+			try {
+				await fetch(ANSWER_URL, {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ text: text }),
+				});
+				isWaitingForAnswer = false;
+				promptInput.placeholder = "Type a message...";
+				addStatus("Ответ отправлен...");
+			} catch (e) {
+				console.error("Failed to send answer", e);
+				addMessage("Ошибка отправки ответа", "agent");
+				promptInput.disabled = false;
+				sendBtn.disabled = false;
+			}
+			return;
+		}
 
 		// Reset thinking div for the new request
 		currentThinkingDiv = null;
@@ -265,6 +299,12 @@ document.addEventListener("DOMContentLoaded", () => {
 		try {
 			await fetch(STOP_URL, { method: "POST" });
 			addStatus("Отправлен сигнал остановки...");
+			// Force UI reset immediately
+			promptInput.disabled = false;
+			sendBtn.disabled = false;
+			sendBtn.style.display = "flex";
+			stopBtn.style.display = "none";
+			promptInput.focus();
 		} catch (error) {
 			console.error("Failed to stop:", error);
 		}

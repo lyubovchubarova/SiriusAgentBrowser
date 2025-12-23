@@ -161,7 +161,7 @@ class Orchestrator:
             step_count = 0
 
             # Memory of executed steps for cycle detection
-            execution_history = []
+            execution_history: list[dict[str, Any]] = []
             final_page_content = ""
 
             while plan.steps and step_count < max_steps:
@@ -171,31 +171,6 @@ class Orchestrator:
                     break
 
                 step = plan.steps[0]  # Always take the first step of the current plan
-
-                if step.action == "finish":
-                    logger.info(f"Task completed: {step.description}")
-
-                    # Extract content for summary
-                    try:
-                        final_page_content = page.evaluate("document.body.innerText")
-                        if len(final_page_content) > 5000:
-                            final_page_content = final_page_content[:5000] + "..."
-                    except Exception:
-                        final_page_content = "Could not extract content."
-
-                    result = f"Task Completed. Final Page Content Summary: {final_page_content[:500]}"  # Short summary for result
-                    results.append(result)
-
-                    # Add to history so memory saver knows we finished
-                    execution_history.append(
-                        {
-                            "description": step.description,
-                            "action": "finish",
-                            "result": "Task Completed Successfully",
-                            "url": page.url,
-                        }
-                    )
-                    break
 
                 step_count += 1
 
@@ -233,6 +208,45 @@ class Orchestrator:
 
                     result = f"User answered: {user_answer}"
                     logger.info(f"User answer received: {user_answer}")
+
+                elif step.action == "finish":
+                    logger.info(f"Task completed: {step.description}")
+                    # Extract content
+                    try:
+                        final_page_content = page.evaluate("document.body.innerText")
+                        if len(final_page_content) > 5000:
+                            final_page_content = final_page_content[:5000] + "..."
+                    except Exception:
+                        final_page_content = "Could not extract content."
+
+                    # Verification
+                    report_status("Verifying task completion...")
+                    verification = self.planner.verify_task_completion(
+                        user_request,
+                        execution_history,
+                        final_page_content,
+                        session_id=session_id,
+                    )
+
+                    if verification["success"]:
+                        result = f"Task Completed. Final Page Content Summary: {final_page_content[:500]}"
+                        results.append(result)
+                        execution_history.append(
+                            {
+                                "description": step.description,
+                                "action": "finish",
+                                "result": "Task Completed Successfully",
+                                "url": page.url,
+                            }
+                        )
+                        break
+                    else:
+                        logger.warning(
+                            f"Verification failed: {verification['reasoning']}"
+                        )
+                        result = f"Self-Correction: I thought I was done, but verification failed. Reason: {verification['reasoning']}. Feedback: {verification['feedback']}"
+                        # Force replan by clearing steps
+                        plan.steps = []
 
                 # Handle 'extract' action specifically
                 elif step.action == "extract":
