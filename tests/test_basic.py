@@ -57,16 +57,12 @@ def judge(response):
     )
     return response.output_text
 
-
-from tqdm import tqdm
-import json
-
-
 def test_prompts():
     with open("tests/test_requests.json", "r", encoding="utf-8") as f:
         data = json.load(f)
 
     succes = 0
+    summary_tokens = 0
     total = len(data)
 
     bar = tqdm(total=total, desc="Tests", unit="req")
@@ -84,9 +80,16 @@ def test_prompts():
         if answer.get("result") == "OK":
             succes += 1
 
-        # обновляем прогресс бар
+        con = sqlite3.connect("logs.db")
+        cur = con.cursor()
+        res = cur.execute("SELECT total_tokens FROM session_stats ORDER BY start_time DESC LIMIT 1").fetchone()
+        con.close()
+        summary_tokens += res[0]
         pct_succes = succes / idx * 100
-        bar.set_postfix({"success_pct": f"{pct_succes:.2f}%"})
+        bar.set_postfix({
+            "success_pct": f"{pct_succes:.2f}%",
+            "avg_tokens": f"{summary_tokens/idx:.1f}"
+        })
         bar.update(1)
 
     bar.close()

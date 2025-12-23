@@ -119,10 +119,10 @@ def log_action(
 
         cursor.execute(
             """
-        INSERT INTO action_logs (component, action_type, message, details, session_id, tokens_used)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO action_logs (component, action_type, message, details, session_id)
+        VALUES (?, ?, ?, ?, ?)
         """,
-            (component, action_type, message, details_json, session_id, tokens_used),
+            (component, action_type, message, details_json, session_id),
         )
 
         conn.commit()
