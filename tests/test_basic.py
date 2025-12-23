@@ -73,16 +73,21 @@ def test_prompts():
         open("tests/result.json", "w", encoding="utf8").write(
             request(obj["query"])
         )
-        open("tests/judge_answer.json", "w", encoding="utf8").write(
-            judge(open("tests/result.json", "r", encoding="utf8").read())
-        )
-        with open("tests/judge_answer.json", "r", encoding="utf-8") as f:
-            answer = json.load(f)
+        while True:
+            try:
+                open("tests/judge_answer.json", "w", encoding="utf8").write(
+                    judge(open("tests/result.json", "r", encoding="utf8").read())
+                )
+                with open("tests/judge_answer.json", "r", encoding="utf-8") as f:
+                    answer = json.load(f)
 
-        if answer.get("result") == "OK":
-            succes += 1
-        else:
-            unsucces.append(obj["id"])
+                if answer.get("result") == "OK":
+                    succes += 1
+                else:
+                    unsucces.append(obj["id"])
+                break
+            except Exception as e:
+                print(e)
 
         con = sqlite3.connect("logs.db")
         cur = con.cursor()
