@@ -1,27 +1,27 @@
-document.addEventListener("DOMContentLoaded", () => {
-// --- ЭЛЕМЕНТЫ UI ---
+п»їdocument.addEventListener("DOMContentLoaded", () => {
+// --- Р­Р›Р•РњР•РќРўР« UI ---
 const chatContainer = document.getElementById("chat-container");
 const promptInput = document.getElementById("prompt-input");
 const sendBtn = document.getElementById("send-btn");
 const stopBtn = document.getElementById("stop-btn");
 const micBtn = document.getElementById("mic-btn");
 
-// Темы
+// РўРµРјС‹
 const themeMenuBtn = document.getElementById("theme-menu-btn");
 const themeOptions = document.getElementById("theme-options");
 const themeBtns = document.querySelectorAll(".theme-opt");
 
-// Звук
+// Р—РІСѓРє
 const muteBtn = document.getElementById("mute-toggle");
 
-// --- КОНФИГУРАЦИЯ API ---
+// --- РљРћРќР¤РР“РЈР РђР¦РРЇ API ---
 const API_URL = "http://127.0.0.1:8000/chat";
 const STREAM_URL = "http://127.0.0.1:8000/stream";
 const STOP_URL = "http://127.0.0.1:8000/stop";
 const HEALTH_URL = "http://127.0.0.1:8000/health";
 const ANSWER_URL = "http://127.0.0.1:8000/answer";
 
-// --- СОСТОЯНИЕ ---
+// --- РЎРћРЎРўРћРЇРќРР• ---
 let currentThinkingDiv = null;
 let isConnected = false;
 let isWaitingForAnswer = false;
@@ -29,9 +29,9 @@ let evtSource = null;
 let chatHistory = [];
 let isMuted = localStorage.getItem("isMuted") === "true";
 
-// --- ИНИЦИАЛИЗАЦИЯ ---
+// --- РРќРР¦РРђР›РР—РђР¦РРЇ ---
 
-// 1. Темы
+// 1. РўРµРјС‹
 function applyTheme(theme) {
 if (theme === "light") {
 document.body.removeAttribute("data-theme");
@@ -63,10 +63,10 @@ themeOptions.classList.remove("active");
 });
 });
 
-// 2. Звук (TTS)
+// 2. Р—РІСѓРє (TTS)
 function updateMuteIcon() {
-muteBtn.textContent = isMuted ? "" : "";
-muteBtn.title = isMuted ? "Включить звук" : "Выключить звук";
+muteBtn.textContent = isMuted ? "пїЅ" : "";
+muteBtn.title = isMuted ? "Р’РєР»СЋС‡РёС‚СЊ Р·РІСѓРє" : "Р’С‹РєР»СЋС‡РёС‚СЊ Р·РІСѓРє";
 }
 updateMuteIcon();
 
@@ -82,7 +82,7 @@ window.speechSynthesis.cancel();
 function speakText(text) {
 if (isMuted || !text) return;
 
-// Очистка текста от markdown символов для озвучки
+// РћС‡РёСЃС‚РєР° С‚РµРєСЃС‚Р° РѕС‚ markdown СЃРёРјРІРѕР»РѕРІ РґР»СЏ РѕР·РІСѓС‡РєРё
 const cleanText = text.replace(/[*#`_\[\]]/g, "");
 
 const utterance = new SpeechSynthesisUtterance(cleanText);
@@ -90,7 +90,7 @@ utterance.lang = "ru-RU";
 window.speechSynthesis.speak(utterance);
 }
 
-// 3. Голосовой ввод (STT)
+// 3. Р“РѕР»РѕСЃРѕРІРѕР№ РІРІРѕРґ (STT)
 if ("webkitSpeechRecognition" in window) {
 const recognition = new webkitSpeechRecognition();
 recognition.continuous = false;
@@ -127,9 +127,9 @@ recognition.start();
 micBtn.style.display = "none";
 }
 
-// --- ЛОГИКА ЧАТА ---
+// --- Р›РћР“РРљРђ Р§РђРўРђ ---
 
-// Начальное состояние кнопок
+// РќР°С‡Р°Р»СЊРЅРѕРµ СЃРѕСЃС‚РѕСЏРЅРёРµ РєРЅРѕРїРѕРє
 sendBtn.disabled = true;
 promptInput.disabled = true;
 promptInput.placeholder = "Connecting to server...";
@@ -143,7 +143,7 @@ if (!isConnected) {
 isConnected = true;
 sendBtn.disabled = false;
 promptInput.disabled = false;
-promptInput.placeholder = "Введите задачу...";
+promptInput.placeholder = "Р’РІРµРґРёС‚Рµ Р·Р°РґР°С‡Сѓ...";
 addStatus("Connected to agent server.");
 initEventSource();
 }
@@ -164,7 +164,7 @@ evtSource = null;
 });
 }
 
-// Проверка здоровья сервера
+// РџСЂРѕРІРµСЂРєР° Р·РґРѕСЂРѕРІСЊСЏ СЃРµСЂРІРµСЂР°
 setInterval(checkHealth, 1000);
 checkHealth();
 
@@ -174,7 +174,7 @@ div.className = `message ${type}-message`;
 
 if (type === "agent" && typeof marked !== "undefined") {
 div.innerHTML = marked.parse(text);
-// Озвучиваем ответ агента
+// РћР·РІСѓС‡РёРІР°РµРј РѕС‚РІРµС‚ Р°РіРµРЅС‚Р°
 speakText(text);
 } else {
 div.textContent = text;
@@ -199,7 +199,7 @@ chatContainer.scrollTop = chatContainer.scrollHeight;
 
 function getOrCreateThinkingDiv() {
 if (!currentThinkingDiv) {
-// Сворачиваем предыдущие блоки thinking
+// РЎРІРѕСЂР°С‡РёРІР°РµРј РїСЂРµРґС‹РґСѓС‰РёРµ Р±Р»РѕРєРё thinking
 document.querySelectorAll(".thinking-content").forEach((el) => {
 if (!el.classList.contains("collapsed")) {
 el.classList.add("collapsed");
@@ -216,7 +216,7 @@ container.className = "thinking-container";
 
 const header = document.createElement("div");
 header.className = "thinking-header";
-header.innerHTML = "<span>Thinking Process</span><span class=\"toggle-icon\">Ў</span>";
+header.innerHTML = "<span>Thinking Process</span><span class=\"toggle-icon\"></span>";
 
 const content = document.createElement("div");
 content.className = "thinking-content";
@@ -259,14 +259,14 @@ chatContainer.scrollTop = chatContainer.scrollHeight;
 } else if (data.type === "status") {
 addStatus(data.content);
 } else if (data.type === "question") {
-// Агент задает вопрос пользователю
+// РђРіРµРЅС‚ Р·Р°РґР°РµС‚ РІРѕРїСЂРѕСЃ РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ
 addMessage(data.content, "agent");
 isWaitingForAnswer = true;
 promptInput.disabled = false;
 sendBtn.disabled = false;
 promptInput.focus();
-promptInput.placeholder = "Введите ответ...";
-addStatus("Ожидание ответа пользователя...");
+promptInput.placeholder = "Р’РІРµРґРёС‚Рµ РѕС‚РІРµС‚...";
+addStatus("РћР¶РёРґР°РЅРёРµ РѕС‚РІРµС‚Р° РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ...");
 }
 } catch (e) {
 console.error("Error parsing stream event:", e);
@@ -282,7 +282,7 @@ async function sendMessage() {
 const text = promptInput.value.trim();
 if (!text) return;
 
-// Если мы в режиме ожидания ответа на вопрос агента
+// Р•СЃР»Рё РјС‹ РІ СЂРµР¶РёРјРµ РѕР¶РёРґР°РЅРёСЏ РѕС‚РІРµС‚Р° РЅР° РІРѕРїСЂРѕСЃ Р°РіРµРЅС‚Р°
 if (isWaitingForAnswer) {
 addMessage(text, "user");
 promptInput.value = "";
@@ -296,18 +296,18 @@ headers: { "Content-Type": "application/json" },
 body: JSON.stringify({ text: text }),
 });
 isWaitingForAnswer = false;
-promptInput.placeholder = "Введите задачу...";
-addStatus("Ответ отправлен...");
+promptInput.placeholder = "Р’РІРµРґРёС‚Рµ Р·Р°РґР°С‡Сѓ...";
+addStatus("РћС‚РІРµС‚ РѕС‚РїСЂР°РІР»РµРЅ...");
 } catch (e) {
 console.error("Failed to send answer", e);
-addMessage("Ошибка отправки ответа", "agent");
+addMessage("РћС€РёР±РєР° РѕС‚РїСЂР°РІРєРё РѕС‚РІРµС‚Р°", "agent");
 promptInput.disabled = false;
 sendBtn.disabled = false;
 }
 return;
 }
 
-// Обычный режим отправки задачи
+// РћР±С‹С‡РЅС‹Р№ СЂРµР¶РёРј РѕС‚РїСЂР°РІРєРё Р·Р°РґР°С‡Рё
 currentThinkingDiv = null;
 
 addMessage(text, "user");
@@ -316,7 +316,7 @@ promptInput.disabled = true;
 sendBtn.disabled = true;
 sendBtn.style.display = "none";
 stopBtn.style.display = "flex";
-addStatus("Агент думает...");
+addStatus("РђРіРµРЅС‚ РґСѓРјР°РµС‚...");
 
 chatHistory.push({ role: "user", content: text });
 
@@ -342,13 +342,13 @@ addMessage(data.result, "agent");
 chatHistory.push({ role: "assistant", content: data.result });
 } else {
 const errorMsg = data.message || data.detail || "Unknown error";
-addMessage(`Ошибка: ${errorMsg}`, "agent");
+addMessage(`РћС€РёР±РєР°: ${errorMsg}`, "agent");
 }
 } catch (error) {
 const status = document.getElementById("current-status");
 if (status) status.remove();
 addMessage(
-"Ошибка соединения с сервером агента. Убедитесь, что python-сервер запущен.",
+"РћС€РёР±РєР° СЃРѕРµРґРёРЅРµРЅРёСЏ СЃ СЃРµСЂРІРµСЂРѕРј Р°РіРµРЅС‚Р°. РЈР±РµРґРёС‚РµСЃСЊ, С‡С‚Рѕ python-СЃРµСЂРІРµСЂ Р·Р°РїСѓС‰РµРЅ.",
 "agent"
 );
 console.error(error);
@@ -365,7 +365,7 @@ currentThinkingDiv = null;
 async function stopExecution() {
 try {
 await fetch(STOP_URL, { method: "POST" });
-addStatus("Остановка...");
+addStatus("РћСЃС‚Р°РЅРѕРІРєР°...");
 } catch (e) {
 console.error("Failed to stop", e);
 }

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+п»ї<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8" />
@@ -25,7 +25,7 @@
     --scroll-thumb: #c0c0c0;
 }
 
-/* --- ТЕМЫ --- */
+/* --- РўР•РњР« --- */
 
 /* DARK */
 [data-theme="dark"] {
@@ -36,17 +36,17 @@
 --user-bg: #0a84ff;
 }
 
-/* НОВЫЙ ГОД (Красно-зеленая гамма) */
+/* РќРћР’Р«Р™ Р“РћР” (РљСЂР°СЃРЅРѕ-Р·РµР»РµРЅР°СЏ РіР°РјРјР°) */
 [data-theme="new-year"] {
---bg-main: #0a2e1c; /* Глубокий зеленый */
+--bg-main: #0a2e1c; /* Р“Р»СѓР±РѕРєРёР№ Р·РµР»РµРЅС‹Р№ */
 --bg-panel: #14452f;
 --text-main: #fff;
 --agent-bg: #1d5c41;
---user-bg: #c41e3a; /* Рождественский красный */
+--user-bg: #c41e3a; /* Р РѕР¶РґРµСЃС‚РІРµРЅСЃРєРёР№ РєСЂР°СЃРЅС‹Р№ */
 --border-color: #2a7a5a;
 }
 
-/* 8 МАРТА (Нежно-розовая гамма) */
+/* 8 РњРђР РўРђ (РќРµР¶РЅРѕ-СЂРѕР·РѕРІР°СЏ РіР°РјРјР°) */
 [data-theme="march-8"] {
 --bg-main: #fff0f5; 
 --bg-panel: #ffffff;
@@ -56,7 +56,7 @@
 --border-color: #ffc0cb;
 }
 
-/* 23 ФЕВРАЛЯ (Милитари/Синий стиль) */
+/* 23 Р¤Р•Р’Р РђР›РЇ (РњРёР»РёС‚Р°СЂРё/РЎРёРЅРёР№ СЃС‚РёР»СЊ) */
 [data-theme="feb-23"] {
 --bg-main: #2b302a;
 --bg-panel: #3c443b;
@@ -66,16 +66,16 @@
 --border-color: #6b8e23;
 }
 
-/* --- СТИЛИ МЕНЮ --- */
+/* --- РЎРўРР›Р РњР•РќР® --- */
 .theme-menu-container {
 position: relative;
 display: flex;
-flex-direction: row-reverse; /* Меню будет раскрываться влево от кнопки */
+flex-direction: row-reverse; /* РњРµРЅСЋ Р±СѓРґРµС‚ СЂР°СЃРєСЂС‹РІР°С‚СЊСЃСЏ РІР»РµРІРѕ РѕС‚ РєРЅРѕРїРєРё */
 align-items: center;
 }
 
 .theme-options {
-display: none; /* Скрыто по умолчанию */
+display: none; /* РЎРєСЂС‹С‚Рѕ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ */
 background: var(--bg-panel);
 border: 1px solid var(--border-color);
 padding: 5px;
@@ -133,7 +133,7 @@ padding: 15px;
 display: flex;
 flex-direction: column;
 gap: 10px;
-/* Добавляем внутренний отступ сверху, чтобы создать место для кнопок */
+/* Р”РѕР±Р°РІР»СЏРµРј РІРЅСѓС‚СЂРµРЅРЅРёР№ РѕС‚СЃС‚СѓРї СЃРІРµСЂС…Сѓ, С‡С‚РѕР±С‹ СЃРѕР·РґР°С‚СЊ РјРµСЃС‚Рѕ РґР»СЏ РєРЅРѕРїРѕРє */
 padding-top: 60px;
 }
 
@@ -322,9 +322,9 @@ fill: white;
 }
 
 #mic-btn {
-background-color: transparent; /* Или var(--input-bg) если хотите фон */
+background-color: transparent; /* РР»Рё var(--input-bg) РµСЃР»Рё С…РѕС‚РёС‚Рµ С„РѕРЅ */
 color: #007aff;
-border: 1px solid var(--border-color); /* Опционально, можно убрать */
+border: 1px solid var(--border-color); /* РћРїС†РёРѕРЅР°Р»СЊРЅРѕ, РјРѕР¶РЅРѕ СѓР±СЂР°С‚СЊ */
 border: none;
 border-radius: 50%;
 width: 36px;
@@ -333,21 +333,21 @@ cursor: pointer;
 display: flex;
 align-items: center;
 justify-content: center;
-margin-right: 5px; /* Отступ от инпута */
+margin-right: 5px; /* РћС‚СЃС‚СѓРї РѕС‚ РёРЅРїСѓС‚Р° */
 transition: all 0.2s;
 }
 
 #mic-btn svg {
 width: 20px;
 height: 20px;
-fill: #8a8a8a; /* Цвет иконки в покое */
+fill: #8a8a8a; /* Р¦РІРµС‚ РёРєРѕРЅРєРё РІ РїРѕРєРѕРµ */
 }
 
 #mic-btn:hover svg {
 fill: #007aff;
 }
 
-/* Стиль, когда микрофон активен (слушает) */
+/* РЎС‚РёР»СЊ, РєРѕРіРґР° РјРёРєСЂРѕС„РѕРЅ Р°РєС‚РёРІРµРЅ (СЃР»СѓС€Р°РµС‚) */
 #mic-btn.listening {
 background-color: #ff3b30;
 animation: pulse 1.5s infinite;
@@ -376,7 +376,7 @@ background-color: var(--scroll-thumb);
 border-radius: 10px;
 }
 
-/* Контейнер-родитель: теперь он управляет расположением */
+/* РљРѕРЅС‚РµР№РЅРµСЂ-СЂРѕРґРёС‚РµР»СЊ: С‚РµРїРµСЂСЊ РѕРЅ СѓРїСЂР°РІР»СЏРµС‚ СЂР°СЃРїРѕР»РѕР¶РµРЅРёРµРј */
 .top-controls {
 position: absolute;
 top: 12px;
@@ -384,15 +384,15 @@ right: 12px;
 display: flex !important;
 gap: 10px;
 z-index: 9999;
-/* Добавим полупрозрачный фон под кнопками (опционально), 
-чтобы они лучше читались на фоне текста при скролле */
+/* Р”РѕР±Р°РІРёРј РїРѕР»СѓРїСЂРѕР·СЂР°С‡РЅС‹Р№ С„РѕРЅ РїРѕРґ РєРЅРѕРїРєР°РјРё (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ), 
+С‡С‚РѕР±С‹ РѕРЅРё Р»СѓС‡С€Рµ С‡РёС‚Р°Р»РёСЃСЊ РЅР° С„РѕРЅРµ С‚РµРєСЃС‚Р° РїСЂРё СЃРєСЂРѕР»Р»Рµ */
 padding: 5px;
 border-radius: 20px;
 }
 
-/* Сами кнопки */
+/* РЎР°РјРё РєРЅРѕРїРєРё */
 .icon-button {
-all: unset; /* Сброс стандартных стилей */
+all: unset; /* РЎР±СЂРѕСЃ СЃС‚Р°РЅРґР°СЂС‚РЅС‹С… СЃС‚РёР»РµР№ */
 background-color: #208cff;
 color: white;
 width: 34px;
@@ -405,11 +405,11 @@ cursor: pointer;
 font-size: 16px;
 transition: transform 0.1s, background-color 0.2s;
 box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-/* Убеждаемся, что нет абсолютного позиционирования здесь */
+/* РЈР±РµР¶РґР°РµРјСЃСЏ, С‡С‚Рѕ РЅРµС‚ Р°Р±СЃРѕР»СЋС‚РЅРѕРіРѕ РїРѕР·РёС†РёРѕРЅРёСЂРѕРІР°РЅРёСЏ Р·РґРµСЃСЊ */
 position: relative !important; 
 }
 
-/* Эффект при наведении */
+/* Р­С„С„РµРєС‚ РїСЂРё РЅР°РІРµРґРµРЅРёРё */
 .icon-button:hover {
 background-color: #0066d6;
 transform: scale(1.05);
@@ -419,9 +419,9 @@ transform: scale(1.05);
 transform: translateY(0);
 }
 
-/* Чтобы кнопки не перекрывали текст сообщения */
+/* Р§С‚РѕР±С‹ РєРЅРѕРїРєРё РЅРµ РїРµСЂРµРєСЂС‹РІР°Р»Рё С‚РµРєСЃС‚ СЃРѕРѕР±С‰РµРЅРёСЏ */
 .message.agent:first-child {
-padding-right: 80px; /* Резервируем место под кнопки в первом сообщении */
+padding-right: 80px; /* Р РµР·РµСЂРІРёСЂСѓРµРј РјРµСЃС‚Рѕ РїРѕРґ РєРЅРѕРїРєРё РІ РїРµСЂРІРѕРј СЃРѕРѕР±С‰РµРЅРёРё */
 }
 
 .message:first-child {
@@ -435,27 +435,27 @@ transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 </head>
 <body>
 <div class="top-controls">
-<button id="mute-toggle" class="icon-button" title="Озвучка"></button>
+<button id="mute-toggle" class="icon-button" title="РћР·РІСѓС‡РєР°"></button>
 
 <div class="theme-menu-container">
-<button id="theme-menu-btn" class="icon-button" title="Выбрать тему">??</button>
+<button id="theme-menu-btn" class="icon-button" title="Р’С‹Р±СЂР°С‚СЊ С‚РµРјСѓ"></button>
 <div id="theme-options" class="theme-options">
-<button class="theme-opt" data-theme="light" title="Светлая"></button>
-<button class="theme-opt" data-theme="dark" title="Темная">??</button>
-<button class="theme-opt" data-theme="new-year" title="Новый Год"></button>
-<button class="theme-opt" data-theme="march-8" title="8 Марта"></button>
-<button class="theme-opt" data-theme="feb-23" title="23 Февраля">???</button>
+<button class="theme-opt" data-theme="light" title="РЎРІРµС‚Р»Р°СЏ">вЂпёЏ</button>
+<button class="theme-opt" data-theme="dark" title="РўРµРјРЅР°СЏ">рџЊ™</button>
+<button class="theme-opt" data-theme="new-year" title="РќРѕРІС‹Р№ Р“РѕРґ"></button>
+<button class="theme-opt" data-theme="march-8" title="8 РњР°СЂС‚Р°"></button>
+<button class="theme-opt" data-theme="feb-23" title="23 Р¤РµРІСЂР°Р»СЏ"></button>
 </div>
 </div>
 </div>
 <div id="chat-container">
 <div class="message agent-message">
-Привет! Я Sirius Agent. Чем могу помочь в браузере?
+РџСЂРёРІРµС‚! РЇ Sirius Agent. Р§РµРј РјРѕРіСѓ РїРѕРјРѕС‡СЊ РІ Р±СЂР°СѓР·РµСЂРµ?
 </div>
 </div>
 
 <div id="input-area">
-<button id="mic-btn" title="Голосовой ввод">
+<button id="mic-btn" title="Р“РѕР»РѕСЃРѕРІРѕР№ РІРІРѕРґ">
 <svg viewBox="0 0 24 24">
 <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 2.34 9 5v6c0 1.66 1.34 3 3 3z"/>
 <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
@@ -465,11 +465,11 @@ transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 <input
 type="text"
 id="prompt-input"
-placeholder="Введите задачу..."
+placeholder="Р’РІРµРґРёС‚Рµ Р·Р°РґР°С‡Сѓ..."
 autocomplete="off"
 />
 
-<button id="stop-btn" title="Остановить">
+<button id="stop-btn" title="РћСЃС‚Р°РЅРѕРІРёС‚СЊ">
 <svg viewBox="0 0 24 24">
 <rect x="6" y="6" width="12" height="12"></rect>
 </svg>
