@@ -700,6 +700,15 @@ class Orchestrator:
                 logger.error(f"Failed to generate summary: {e}")
                 final_output = "Задача выполнена, но не удалось сгенерировать отчет."
 
+            # Log the final answer
+            log_action(
+                "Orchestrator",
+                "FINAL_ANSWER",
+                "Task completed",
+                {"answer": final_output},
+                session_id=session_id,
+            )
+
             # Save successful experience to memory
             if execution_history and "Failed" not in execution_history[-1]["result"]:
                 # Only save if the last step wasn't a failure (heuristic)
@@ -712,7 +721,15 @@ class Orchestrator:
 
         except Exception as e:
             logger.error(f"Error processing request: {e}", exc_info=True)
-            return f"Error: {e}"
+            error_msg = f"Error: {e}"
+            log_action(
+                "Orchestrator",
+                "FINAL_ANSWER",
+                "Task failed with error",
+                {"answer": error_msg, "error": str(e)},
+                session_id=session_id,
+            )
+            return error_msg
         finally:
             # self.close_browser()
             pass
