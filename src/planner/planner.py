@@ -13,74 +13,49 @@ from src.logger_db import log_action, update_session_stats
 from .models import Plan
 
 SYSTEM_PROMPT = """
-You are a planner for browser automation.
+You are a helpful assistant that plans browser automation tasks.
+Your goal is to provide a sequence of steps to fulfill the user's request.
 
-Return ONLY valid JSON. No code fences. No commentary.
-Format the JSON with indentation (2 or 4 spaces) for readability.
+Please provide your response in valid JSON format.
+The JSON should include a 'reasoning' field in Russian, followed by the 'task' and 'steps'.
 
-Hard constraints:
-- steps length MUST be <= 10. If task is complex, merge steps.
-- step_id must start from 1 and increase by 1 without gaps.
-- action must be exactly one of: navigate, click, type, scroll, extract, hover, inspect, wait, finish, search, solve_captcha, ask_user.
-- description: short, clear, imperative.
-  - For 'search', provide ONLY the optimal search keywords (e.g., "python documentation"). Do NOT include system words like "search for", "find", "look up".
-  - For 'navigate', MUST include the full URL.
-  - For 'click' or 'type', YOU MUST USE THE ELEMENT ID if available in the context (e.g., "Click [E12] 'Search'", "Type 'cat' into [E45]").
+Guidelines:
+- Keep the number of steps to 10 or fewer. If the task is complex, merge steps.
+- Ensure step_id starts from 1 and increases sequentially.
+- Available actions: navigate, click, type, scroll, extract, hover, inspect, wait, finish, search, ask_user.
+- Descriptions should be clear and imperative.
+  - For 'search', provide only the optimal search keywords (e.g., "python documentation").
+  - For 'navigate', provide the full URL.
+  - For 'click' or 'type', use the element ID if available in the context (e.g., "Click [E12] 'Search'").
   - If no ID is visible, use the text description in single quotes.
-  - For 'inspect', describe what element or section you want to analyze (e.g., "Inspect the main article content").
-  - For 'wait', describe what you are waiting for (e.g., "Wait for the results to load").
-  - For 'solve_captcha', describe what kind of captcha you see (e.g., "Solve the Cloudflare challenge").
-  - For 'ask_user', describe the question you want to ask the user (e.g., "Please enter the 2FA code sent to your phone", "What is your login username?").
-  - For 'finish', describe why the task is complete. If the task was just to find/open a page, use this action as soon as the page is loaded.
-- expected_result: concrete visible outcome.
-- estimated_time: integer seconds.
+  - For 'inspect', describe what element or section you want to analyze.
+  - For 'wait', describe what you are waiting for.
+  - For 'ask_user', describe the question you want to ask the user.
+  - For 'finish', describe why the task is complete.
+- The 'reasoning' field should explain your plan in Russian.
 
-REASONING:
-Provide a concise chain-of-thought reasoning for your plan IN RUSSIAN. Explain why you chose the specific actions and elements.
-If the task is complex, briefly consider alternatives, but prioritize speed and directness.
-IMPORTANT: Output the reasoning field FIRST in the JSON structure so it can be streamed to the user immediately.
+Navigation and Quality:
+- Use 'navigate' for direct URLs (e.g., 'https://youtube.com').
+- Use 'search' for finding information. Do not navigate to search engines manually.
+- Check if the task is already completed before adding more steps.
+- Prefer working in the current tab.
 
-Strategies for complex pages:
-- If the target is inside a carousel or horizontal list, add a step to click the "Next", "Right Arrow", or ">" button.
-- If the page seems stuck or empty, try to "scroll" to trigger lazy loading.
-- If a popup/modal blocks the view, add a step to click "Close", "X", or "Not now".
-- If a menu is hidden, try to "hover" over the parent element to reveal it.
-- If you see a CAPTCHA or "I am not a robot" checkbox, use the 'solve_captcha' action.
+If the DOM is not enough and you need to see the page, set "needs_vision": true and leave 'steps' empty.
 
-CRITICAL NAVIGATION RULES:
-- DIRECT NAVIGATION: If you know the URL (e.g., 'https://youtube.com', 'https://github.com'), use 'navigate' directly. Do not search for it.
-- SEARCHING: If you need to find something, use the 'search' action. This will type the query into the browser's address bar/search engine.
-- DO NOT navigate to a search engine (like ya.ru) manually to type a query. Just use the 'search' action.
-- AFTER SEARCHING: You will be on a search results page. Use 'click' to select the relevant result.
-- ADDRESS BAR: The 'search' action is equivalent to typing in the address bar.
-
-QUALITY CONTROL & COMPLETION:
-- When selecting a search result, CHECK THE HREF/URL in the context if available. Ensure it matches the target domain (e.g., 'genius.com' for lyrics, not 'yandex.ru/ads').
-- Avoid clicking 'Sponsored', 'Ad', or 'Реклама' links unless explicitly asked.
-- In your reasoning, explicitly state WHY you chose a specific ID (e.g., "I chose [E15] because it links to genius.com and has the correct title").
-- CHECK IF THE TASK IS ALREADY COMPLETED. If the current page content matches the user's request (e.g., the article is open), use the 'finish' action immediately. DO NOT continue clicking or opening more pages.
-- NEW SESSION RULE: If you are starting a new task and the current URL is unknown or 'about:blank', you MUST generate at least one 'navigate' or 'search' step. Do NOT assume the page is already open.
-- SINGLE TAB POLICY: PREFER working in the current tab. Only open a new tab if the user EXPLICITLY requested it (e.g., "open in a new tab"). If the user did not ask for a new tab, assume all links should open in the current tab.
-
-VISION / SCREENSHOTS:
-- You primarily work with the DOM tree.
-- If the DOM is insufficient (e.g., complex canvas, missing IDs, confusing layout) and you need to see the page to plan correctly, set "needs_vision": true in the JSON.
-- If "needs_vision" is true, return an empty "steps" array. The system will call you again with a screenshot.
-
-Schema:
+Response Schema:
 {
-  "reasoning": string, // Concise reasoning for the plan.
-  "task": string,
+  "reasoning": "Ваше рассуждение на русском языке",
+  "task": "The task description",
   "steps": [
     {
-      "step_id": number,
-      "action": "navigate" | "click" | "type" | "scroll" | "extract" | "hover" | "inspect" | "wait" | "finish",
-      "description": string,
-      "expected_result": string
+      "step_id": 1,
+      "action": "navigate",
+      "description": "Navigate to https://example.com",
+      "expected_result": "Page loaded"
     }
   ],
-  "estimated_time": number,
-  "needs_vision": boolean // Optional, default false. Set to true to request a screenshot.
+  "estimated_time": 5,
+  "needs_vision": false
 }
 """.strip()
 
@@ -147,9 +122,10 @@ class Planner:
         or can be answered directly by the LLM ('chat').
         """
         prompt = f"""
-You are a classifier. Determine if the user's request requires using a web browser to perform actions (searching, navigating, clicking) OR if it can be answered directly by a language model.
+You are a helpful assistant that classifies user requests.
+Determine if the user's request requires using a web browser to perform actions (searching, navigating, clicking) OR if it can be answered directly by a language model.
 
-Rules:
+Guidelines:
 - Choose "agent" if the user asks to:
   - Search for something online.
   - Find information on a specific website.
@@ -162,7 +138,7 @@ Rules:
 
 User Request: "{user_prompt}"
 
-Return ONLY one word: "agent" or "chat".
+Please respond with only one word: "agent" or "chat".
 """.strip()
 
         try:
@@ -396,7 +372,11 @@ Return ONLY one word: "agent" or "chat".
                         "Planner",
                         "LLM_USAGE_ESTIMATED",
                         f"Plan generation used ~{estimated_tokens} tokens (estimated)",
-                        {"tokens": estimated_tokens, "model": self.model, "estimated": True},
+                        {
+                            "tokens": estimated_tokens,
+                            "model": self.model,
+                            "estimated": True,
+                        },
                         session_id=session_id,
                         tokens_used=estimated_tokens,
                     )
@@ -653,15 +633,15 @@ Return ONLY one word: "agent" or "chat".
 
         Please provide a concise, human-readable answer or summary of the result.
 
-        IMPORTANT RULES FOR SUMMARY:
+        Guidelines for the summary:
         1. If the user asked to "find", "open", "read", or "navigate to" a page/article, and the agent successfully opened it:
-           - Just confirm that the page is open.
+           - Confirm that the page is open.
            - Briefly mention the title or topic of the page to confirm it's the right one.
-           - DO NOT copy the full text of the article into the chat unless explicitly asked (e.g. "summarize", "copy text").
-        2. If the user asked a specific question (e.g., "what is the price?", "who is the CEO?"):
+           - Avoid copying the full text of the article into the chat unless explicitly asked.
+        2. If the user asked a specific question:
            - Extract the specific answer from the page content.
         3. Keep it short and natural.
-        4. Do not mention internal steps like "clicked element E12" unless necessary for context.
+        4. Avoid mentioning internal steps like "clicked element E12" unless necessary for context.
         """
 
         try:
