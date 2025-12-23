@@ -1,432 +1,382 @@
 document.addEventListener("DOMContentLoaded", () => {
-	const themeToggle = document.getElementById("theme-toggle");
+// --- ЭЛЕМЕНТЫ UI ---
+const chatContainer = document.getElementById("chat-container");
+const promptInput = document.getElementById("prompt-input");
+const sendBtn = document.getElementById("send-btn");
+const stopBtn = document.getElementById("stop-btn");
+const micBtn = document.getElementById("mic-btn");
 
-	// Р·Р°РіСЂСѓР·РєР° СЃРѕС…СЂР°РЅС‘РЅРЅРѕР№ С‚РµРјС‹
-	const savedTheme = localStorage.getItem("theme");
-	if (savedTheme === "dark") {
-		document.body.classList.add("dark");
-		themeToggle.textContent = "вЂпёЏ";
-	} else {
-		themeToggle.textContent = "рџЊ™";
-	}
+// Темы
+const themeMenuBtn = document.getElementById("theme-menu-btn");
+const themeOptions = document.getElementById("theme-options");
+const themeBtns = document.querySelectorAll(".theme-opt");
 
-	// РїРµСЂРµРєР»СЋС‡Р°С‚РµР»СЊ
-	themeToggle.addEventListener("click", () => {
-		document.body.classList.toggle("dark");
-		const isDark = document.body.classList.contains("dark");
+// Звук
+const muteBtn = document.getElementById("mute-toggle");
 
-		localStorage.setItem("theme", isDark ? "dark" : "light");
-		themeToggle.textContent = isDark ? "вЂпёЏ" : "рџЊ™";
-	});
+// --- КОНФИГУРАЦИЯ API ---
+const API_URL = "http://127.0.0.1:8000/chat";
+const STREAM_URL = "http://127.0.0.1:8000/stream";
+const STOP_URL = "http://127.0.0.1:8000/stop";
+const HEALTH_URL = "http://127.0.0.1:8000/health";
+const ANSWER_URL = "http://127.0.0.1:8000/answer";
 
-	const chatContainer = document.getElementById("chat-container");
-	const promptInput = document.getElementById("prompt-input");
-	const sendBtn = document.getElementById("send-btn");
-	const stopBtn = document.getElementById("stop-btn");
-	const clearHistoryBtn = document.getElementById("clear-history");
+// --- СОСТОЯНИЕ ---
+let currentThinkingDiv = null;
+let isConnected = false;
+let isWaitingForAnswer = false;
+let evtSource = null;
+let chatHistory = [];
+let isMuted = localStorage.getItem("isMuted") === "true";
 
-	// Clear history handler
-	clearHistoryBtn.addEventListener("click", () => {
-		chatHistory = [];
-		chatContainer.innerHTML = `
-			<div class="message agent-message">
-				РџСЂРёРІРµС‚! РЇ Sirius Agent. Р§РµРј РјРѕРіСѓ РїРѕРјРѕС‡СЊ РІ Р±СЂР°СѓР·РµСЂРµ?
-			</div>
-		`;
-	});
+// --- ИНИЦИАЛИЗАЦИЯ ---
 
-	// Configuration
-	const API_URL = "http://127.0.0.1:8000/chat";
-	const STREAM_URL = "http://127.0.0.1:8000/stream";
-	const STOP_URL = "http://127.0.0.1:8000/stop";
-	const HEALTH_URL = "http://127.0.0.1:8000/health";
-	const ANSWER_URL = "http://127.0.0.1:8000/answer";
+// 1. Темы
+function applyTheme(theme) {
+if (theme === "light") {
+document.body.removeAttribute("data-theme");
+} else {
+document.body.setAttribute("data-theme", theme);
+}
+localStorage.setItem("theme", theme);
+}
 
-	let currentThinkingDiv = null;
-	let isConnected = false;
-	let isWaitingForAnswer = false;
-	let evtSource = null;
-	let chatHistory = []; // Store chat history
+const savedTheme = localStorage.getItem("theme") || "light";
+applyTheme(savedTheme);
 
-	// Initial state
-	sendBtn.disabled = true;
-	promptInput.disabled = true;
-	promptInput.placeholder = "Connecting to server...";
+themeMenuBtn.addEventListener("click", (e) => {
+e.stopPropagation();
+themeOptions.classList.toggle("active");
+});
 
-	function checkHealth() {
-		fetch(HEALTH_URL)
-			.then((res) => res.json())
-			.then((data) => {
-				if (data.status === "ok") {
-					if (!isConnected) {
-						isConnected = true;
-						sendBtn.disabled = false;
-						promptInput.disabled = false;
-						promptInput.placeholder = "Type a message...";
-						addStatus("Connected to agent server.");
-						// Start stream listener only when connected
-						initEventSource();
-					}
-				}
-			})
-			.catch(() => {
-				if (isConnected) {
-					isConnected = false;
-					sendBtn.disabled = true;
-					promptInput.disabled = true;
-					promptInput.placeholder = "Reconnecting...";
-					addStatus("Connection lost. Retrying...");
-					if (evtSource) {
-						evtSource.close();
-						evtSource = null;
-					}
-				}
-			});
-	}
+document.addEventListener("click", (e) => {
+if (!themeOptions.contains(e.target) && e.target !== themeMenuBtn) {
+themeOptions.classList.remove("active");
+}
+});
 
-	// Poll health every 1s
-	setInterval(checkHealth, 1000);
-	checkHealth(); // Check immediately
+themeBtns.forEach(btn => {
+btn.addEventListener("click", () => {
+const theme = btn.dataset.theme;
+applyTheme(theme);
+themeOptions.classList.remove("active");
+});
+});
 
-	function addMessage(text, type) {
-		const div = document.createElement("div");
-		div.className = `message ${type}-message`;
-		if (type === "agent" && typeof marked !== "undefined") {
-			div.innerHTML = marked.parse(text);
-		} else {
-			div.textContent = text;
-		}
-		chatContainer.appendChild(div);
-		chatContainer.scrollTop = chatContainer.scrollHeight;
-	}
+// 2. Звук (TTS)
+function updateMuteIcon() {
+muteBtn.textContent = isMuted ? "" : "";
+muteBtn.title = isMuted ? "Включить звук" : "Выключить звук";
+}
+updateMuteIcon();
 
-	function addStatus(text) {
-		const div = document.createElement("div");
-		div.className = "status-message";
-		div.textContent = text;
-		div.id = "current-status";
+muteBtn.addEventListener("click", () => {
+isMuted = !isMuted;
+localStorage.setItem("isMuted", isMuted);
+updateMuteIcon();
+if (isMuted) {
+window.speechSynthesis.cancel();
+}
+});
 
-		// Remove previous status if exists
-		const prev = document.getElementById("current-status");
-		if (prev) prev.remove();
+function speakText(text) {
+if (isMuted || !text) return;
 
-		chatContainer.appendChild(div);
-		chatContainer.scrollTop = chatContainer.scrollHeight;
-	}
+// Очистка текста от markdown символов для озвучки
+const cleanText = text.replace(/[*#`_\[\]]/g, "");
 
-	function getOrCreateThinkingDiv() {
-		if (!currentThinkingDiv) {
-			// Collapse all previous thinking containers to keep UI clean
-			document.querySelectorAll(".thinking-content").forEach((el) => {
-				if (!el.classList.contains("collapsed")) {
-					el.classList.add("collapsed");
-					// Update icon
-					const header = el.previousElementSibling;
-					if (header) {
-						const icon = header.querySelector(".toggle-icon");
-						if (icon) icon.style.transform = "rotate(-90deg)";
-					}
-				}
-			});
+const utterance = new SpeechSynthesisUtterance(cleanText);
+utterance.lang = "ru-RU";
+window.speechSynthesis.speak(utterance);
+}
 
-			// Create container
-			const container = document.createElement("div");
-			container.className = "thinking-container";
+// 3. Голосовой ввод (STT)
+if ("webkitSpeechRecognition" in window) {
+const recognition = new webkitSpeechRecognition();
+recognition.continuous = false;
+recognition.interimResults = false;
+recognition.lang = "ru-RU";
 
-			// Create header
-			const header = document.createElement("div");
-			header.className = "thinking-header";
-			header.innerHTML =
-				'<span>Thinking Process</span><span class="toggle-icon">в–ј</span>';
+recognition.onstart = () => {
+micBtn.classList.add("listening");
+};
 
-			// Create content
-			const content = document.createElement("div");
-			content.className = "thinking-content";
+recognition.onend = () => {
+micBtn.classList.remove("listening");
+};
 
-			// Toggle logic
-			header.addEventListener("click", () => {
-				content.classList.toggle("collapsed");
-				const icon = header.querySelector(".toggle-icon");
-				icon.style.transform = content.classList.contains("collapsed")
-					? "rotate(-90deg)"
-					: "rotate(0deg)";
-			});
+recognition.onresult = (event) => {
+const transcript = event.results[0][0].transcript;
+promptInput.value = transcript;
+promptInput.focus();
+};
 
-			container.appendChild(header);
-			container.appendChild(content);
-			chatContainer.appendChild(container);
-			chatContainer.scrollTop = chatContainer.scrollHeight;
+recognition.onerror = (event) => {
+console.error("Speech recognition error", event.error);
+micBtn.classList.remove("listening");
+};
 
-			// Store the content div as the target for streaming
-			currentThinkingDiv = content;
-		}
-		return currentThinkingDiv;
-	}
+micBtn.addEventListener("click", () => {
+if (micBtn.classList.contains("listening")) {
+recognition.stop();
+} else {
+recognition.start();
+}
+});
+} else {
+micBtn.style.display = "none";
+}
 
-	function initEventSource() {
-		if (evtSource) {
-			evtSource.close();
-		}
-		console.log("Connecting to EventSource at", STREAM_URL);
-		evtSource = new EventSource(STREAM_URL);
+// --- ЛОГИКА ЧАТА ---
 
-		evtSource.onmessage = (event) => {
-			// console.log("Stream event:", event.data);
-			if (event.data === ": keepalive") return;
+// Начальное состояние кнопок
+sendBtn.disabled = true;
+promptInput.disabled = true;
+promptInput.placeholder = "Connecting to server...";
 
-			try {
-				const data = JSON.parse(event.data);
+function checkHealth() {
+fetch(HEALTH_URL)
+.then((res) => res.json())
+.then((data) => {
+if (data.status === "ok") {
+if (!isConnected) {
+isConnected = true;
+sendBtn.disabled = false;
+promptInput.disabled = false;
+promptInput.placeholder = "Введите задачу...";
+addStatus("Connected to agent server.");
+initEventSource();
+}
+}
+})
+.catch(() => {
+if (isConnected) {
+isConnected = false;
+sendBtn.disabled = true;
+promptInput.disabled = true;
+promptInput.placeholder = "Reconnecting...";
+addStatus("Connection lost. Retrying...");
+if (evtSource) {
+evtSource.close();
+evtSource = null;
+}
+}
+});
+}
 
-				if (data.type === "token") {
-					const div = getOrCreateThinkingDiv();
-					div.textContent += data.content;
-					chatContainer.scrollTop = chatContainer.scrollHeight;
-				} else if (data.type === "status") {
-					addStatus(data.content);
-				} else if (data.type === "question") {
-					addMessage(data.content, "agent");
-					isWaitingForAnswer = true;
-					promptInput.disabled = false;
-					sendBtn.disabled = false;
-					promptInput.focus();
-					promptInput.placeholder = "Р’РІРµРґРёС‚Рµ РѕС‚РІРµС‚...";
-					addStatus("РћР¶РёРґР°РЅРёРµ РѕС‚РІРµС‚Р° РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ...");
-				}
-			} catch (e) {
-				console.error("Error parsing stream event:", e);
-			}
-		};
+// Проверка здоровья сервера
+setInterval(checkHealth, 1000);
+checkHealth();
 
-		evtSource.onerror = (err) => {
-			console.error("EventSource failed:", err);
-			// EventSource automatically tries to reconnect
-		};
-	}
+function addMessage(text, type) {
+const div = document.createElement("div");
+div.className = `message ${type}-message`;
 
-	// Start listening to the stream
-	// initEventSource(); // Moved to checkHealth
+if (type === "agent" && typeof marked !== "undefined") {
+div.innerHTML = marked.parse(text);
+// Озвучиваем ответ агента
+speakText(text);
+} else {
+div.textContent = text;
+}
 
-	async function sendMessage() {
-		const text = promptInput.value.trim();
-		if (!text) return;
+chatContainer.appendChild(div);
+chatContainer.scrollTop = chatContainer.scrollHeight;
+}
 
-		if (isWaitingForAnswer) {
-			addMessage(text, "user");
-			promptInput.value = "";
-			promptInput.disabled = true;
-			sendBtn.disabled = true;
+function addStatus(text) {
+const div = document.createElement("div");
+div.className = "status-message";
+div.textContent = text;
+div.id = "current-status";
 
-			try {
-				await fetch(ANSWER_URL, {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ text: text }),
-				});
-				isWaitingForAnswer = false;
-				promptInput.placeholder = "Type a message...";
-				addStatus("РћС‚РІРµС‚ РѕС‚РїСЂР°РІР»РµРЅ...");
-			} catch (e) {
-				console.error("Failed to send answer", e);
-				addMessage("РћС€РёР±РєР° РѕС‚РїСЂР°РІРєРё РѕС‚РІРµС‚Р°", "agent");
-				promptInput.disabled = false;
-				sendBtn.disabled = false;
-			}
-			return;
-		}
+const prev = document.getElementById("current-status");
+if (prev) prev.remove();
 
-		// Reset thinking div for the new request
-		currentThinkingDiv = null;
+chatContainer.appendChild(div);
+chatContainer.scrollTop = chatContainer.scrollHeight;
+}
 
-		// UI Updates
-		addMessage(text, "user");
-		promptInput.value = "";
-		promptInput.disabled = true;
-		sendBtn.disabled = true;
-		sendBtn.style.display = "none";
-		stopBtn.style.display = "flex";
-		addStatus("РђРіРµРЅС‚ РґСѓРјР°РµС‚...");
+function getOrCreateThinkingDiv() {
+if (!currentThinkingDiv) {
+// Сворачиваем предыдущие блоки thinking
+document.querySelectorAll(".thinking-content").forEach((el) => {
+if (!el.classList.contains("collapsed")) {
+el.classList.add("collapsed");
+const header = el.previousElementSibling;
+if (header) {
+const icon = header.querySelector(".toggle-icon");
+if (icon) icon.style.transform = "rotate(-90deg)";
+}
+}
+});
 
-		// Add user message to history
-		chatHistory.push({ role: "user", content: text });
+const container = document.createElement("div");
+container.className = "thinking-container";
 
-		try {
-			const response = await fetch(API_URL, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({
-					query: text,
-					chat_history: chatHistory,
-				}),
-			});
+const header = document.createElement("div");
+header.className = "thinking-header";
+header.innerHTML = "<span>Thinking Process</span><span class=\"toggle-icon\">Ў</span>";
 
-			const data = await response.json();
+const content = document.createElement("div");
+content.className = "thinking-content";
 
-			// Remove status
-			const status = document.getElementById("current-status");
-			if (status) status.remove();
+header.addEventListener("click", () => {
+content.classList.toggle("collapsed");
+const icon = header.querySelector(".toggle-icon");
+icon.style.transform = content.classList.contains("collapsed")
+? "rotate(-90deg)"
+: "rotate(0deg)";
+});
 
-			if (data.status === "success") {
-				addMessage(data.result, "agent");
-				// Add agent response to history
-				chatHistory.push({ role: "assistant", content: data.result });
-			} else {
-				const errorMsg = data.message || data.detail || "Unknown error";
-				addMessage(`РћС€РёР±РєР°: ${errorMsg}`, "agent");
-			}
-		} catch (error) {
-			const status = document.getElementById("current-status");
-			if (status) status.remove();
-			addMessage(
-				"РћС€РёР±РєР° СЃРѕРµРґРёРЅРµРЅРёСЏ СЃ СЃРµСЂРІРµСЂРѕРј Р°РіРµРЅС‚Р°. РЈР±РµРґРёС‚РµСЃСЊ, С‡С‚Рѕ python-СЃРµСЂРІРµСЂ Р·Р°РїСѓС‰РµРЅ.",
-				"agent"
-			);
-			console.error(error);
-		} finally {
-			promptInput.disabled = false;
-			sendBtn.disabled = false;
-			sendBtn.style.display = "flex";
-			stopBtn.style.display = "none";
-			promptInput.focus();
+container.appendChild(header);
+container.appendChild(content);
+chatContainer.appendChild(container);
+chatContainer.scrollTop = chatContainer.scrollHeight;
 
-			// Reset thinking div again to ensure next tokens (if any delayed) don't append to old one
-			currentThinkingDiv = null;
-		}
-	}
+currentThinkingDiv = content;
+}
+return currentThinkingDiv;
+}
 
-	async function stopExecution() {
-		try {
-			await fetch(STOP_URL, { method: "POST" });
-			addStatus("РћС‚РїСЂР°РІР»РµРЅ СЃРёРіРЅР°Р» РѕСЃС‚Р°РЅРѕРІРєРё...");
-			// Force UI reset immediately
-			promptInput.disabled = false;
-			sendBtn.disabled = false;
-			sendBtn.style.display = "flex";
-			stopBtn.style.display = "none";
-			promptInput.focus();
-		} catch (error) {
-			console.error("Failed to stop:", error);
-		}
-	}
+function initEventSource() {
+if (evtSource) {
+evtSource.close();
+}
+console.log("Connecting to EventSource at", STREAM_URL);
+evtSource = new EventSource(STREAM_URL);
 
-	sendBtn.addEventListener("click", sendMessage);
-	stopBtn.addEventListener("click", stopExecution);
+evtSource.onmessage = (event) => {
+if (event.data === ": keepalive") return;
 
-	promptInput.addEventListener("keypress", (e) => {
-		if (e.key === "Enter" && !e.shiftKey) {
-			e.preventDefault();
-			sendMessage();
-		}
-	});
+try {
+const data = JSON.parse(event.data);
 
-	const micBtn = document.getElementById("mic-btn");
-	let recognition = null;
+if (data.type === "token") {
+const div = getOrCreateThinkingDiv();
+div.textContent += data.content;
+chatContainer.scrollTop = chatContainer.scrollHeight;
+} else if (data.type === "status") {
+addStatus(data.content);
+} else if (data.type === "question") {
+// Агент задает вопрос пользователю
+addMessage(data.content, "agent");
+isWaitingForAnswer = true;
+promptInput.disabled = false;
+sendBtn.disabled = false;
+promptInput.focus();
+promptInput.placeholder = "Введите ответ...";
+addStatus("Ожидание ответа пользователя...");
+}
+} catch (e) {
+console.error("Error parsing stream event:", e);
+}
+};
 
-	// РџСЂРѕРІРµСЂСЏРµРј РїРѕРґРґРµСЂР¶РєСѓ API
-	if ("webkitSpeechRecognition" in window) {
-		recognition = new webkitSpeechRecognition();
-		recognition.continuous = false; // РћСЃС‚Р°РЅРѕРІРёС‚СЊ Р·Р°РїРёСЃСЊ РїРѕСЃР»Рµ РѕРґРЅРѕР№ С„СЂР°Р·С‹
-		recognition.interimResults = true; // РџРѕРєР°Р·С‹РІР°С‚СЊ С‚РµРєСЃС‚ РІ РїСЂРѕС†РµСЃСЃРµ РіРѕРІРѕСЂРµРЅРёСЏ
-		recognition.lang = "ru-RU"; // РЈСЃС‚Р°РЅРѕРІРёС‚Рµ РЅСѓР¶РЅС‹Р№ СЏР·С‹Рє
+evtSource.onerror = (err) => {
+console.error("EventSource failed:", err);
+};
+}
 
-		recognition.onstart = () => {
-			console.log("Speech recognition started");
-			micBtn.classList.add("listening");
-			promptInput.placeholder = "Р“РѕРІРѕСЂРёС‚Рµ...";
-		};
+async function sendMessage() {
+const text = promptInput.value.trim();
+if (!text) return;
 
-		recognition.onend = () => {
-			console.log("Speech recognition ended");
-			micBtn.classList.remove("listening");
-			promptInput.placeholder = isConnected
-				? "Р’РІРµРґРёС‚Рµ Р·Р°РґР°С‡Сѓ..."
-				: "Connecting...";
-			promptInput.focus();
-		};
+// Если мы в режиме ожидания ответа на вопрос агента
+if (isWaitingForAnswer) {
+addMessage(text, "user");
+promptInput.value = "";
+promptInput.disabled = true;
+sendBtn.disabled = true;
 
-		recognition.onresult = (event) => {
-			let interimTranscript = "";
-			let finalTranscript = "";
+try {
+await fetch(ANSWER_URL, {
+method: "POST",
+headers: { "Content-Type": "application/json" },
+body: JSON.stringify({ text: text }),
+});
+isWaitingForAnswer = false;
+promptInput.placeholder = "Введите задачу...";
+addStatus("Ответ отправлен...");
+} catch (e) {
+console.error("Failed to send answer", e);
+addMessage("Ошибка отправки ответа", "agent");
+promptInput.disabled = false;
+sendBtn.disabled = false;
+}
+return;
+}
 
-			for (let i = event.resultIndex; i < event.results.length; ++i) {
-				if (event.results[i].isFinal) {
-					finalTranscript += event.results[i][0].transcript;
-				} else {
-					interimTranscript += event.results[i][0].transcript;
-				}
-			}
+// Обычный режим отправки задачи
+currentThinkingDiv = null;
 
-			console.log("Transcript:", {
-				interim: interimTranscript,
-				final: finalTranscript,
-			});
+addMessage(text, "user");
+promptInput.value = "";
+promptInput.disabled = true;
+sendBtn.disabled = true;
+sendBtn.style.display = "none";
+stopBtn.style.display = "flex";
+addStatus("Агент думает...");
 
-			// РџРѕРєР°Р·С‹РІР°РµРј РїСЂРѕРјРµР¶СѓС‚РѕС‡РЅС‹Р№ СЂРµР·СѓР»СЊС‚Р°С‚ РІ РїР»РµР№СЃС…РѕР»РґРµСЂРµ РёР»Рё РёРЅРїСѓС‚Рµ
-			if (interimTranscript) {
-				promptInput.placeholder = interimTranscript + "...";
-			}
+chatHistory.push({ role: "user", content: text });
 
-			if (finalTranscript) {
-				const currentText = promptInput.value;
-				const prefix =
-					currentText && !currentText.endsWith(" ") ? " " : "";
+try {
+const response = await fetch(API_URL, {
+method: "POST",
+headers: {
+"Content-Type": "application/json",
+},
+body: JSON.stringify({
+query: text,
+chat_history: chatHistory,
+}),
+});
 
-				// 1. Р”РѕР±Р°РІР»СЏРµРј СЂР°СЃРїРѕР·РЅР°РЅРЅС‹Р№ С‚РµРєСЃС‚ РІ РёРЅРїСѓС‚
-				promptInput.value = currentText + prefix + finalTranscript;
+const data = await response.json();
 
-				// 2. РћСЃС‚Р°РЅР°РІР»РёРІР°РµРј СЂР°СЃРїРѕР·РЅР°РІР°РЅРёРµ
-				recognition.stop();
+const status = document.getElementById("current-status");
+if (status) status.remove();
 
-				// 3. РђР’РўРћРњРђРўРР§Р•РЎРљРђРЇ РћРўРџР РђР’РљРђ
-				setTimeout(() => {
-					if (promptInput.value.trim()) {
-						sendMessage();
-					}
-				}, 500);
-			}
-		};
+if (data.status === "success") {
+addMessage(data.result, "agent");
+chatHistory.push({ role: "assistant", content: data.result });
+} else {
+const errorMsg = data.message || data.detail || "Unknown error";
+addMessage(`Ошибка: ${errorMsg}`, "agent");
+}
+} catch (error) {
+const status = document.getElementById("current-status");
+if (status) status.remove();
+addMessage(
+"Ошибка соединения с сервером агента. Убедитесь, что python-сервер запущен.",
+"agent"
+);
+console.error(error);
+} finally {
+promptInput.disabled = false;
+sendBtn.disabled = false;
+sendBtn.style.display = "flex";
+stopBtn.style.display = "none";
+promptInput.focus();
+currentThinkingDiv = null;
+}
+}
 
-		recognition.onerror = (event) => {
-			console.error("Speech recognition error", event.error);
-			micBtn.classList.remove("listening");
+async function stopExecution() {
+try {
+await fetch(STOP_URL, { method: "POST" });
+addStatus("Остановка...");
+} catch (e) {
+console.error("Failed to stop", e);
+}
+}
 
-			if (event.error === "no-speech") {
-				addStatus("Р РµС‡СЊ РЅРµ СЂР°СЃРїРѕР·РЅР°РЅР°. РџРѕРїСЂРѕР±СѓР№С‚Рµ РµС‰Рµ СЂР°Р·.");
-				return;
-			}
+sendBtn.addEventListener("click", sendMessage);
+stopBtn.addEventListener("click", stopExecution);
 
-			// РљР›Р®Р§Р•Р’РћР™ РњРћРњР•РќРў: РћР±СЂР°Р±РѕС‚РєР° РѕС‚СЃСѓС‚СЃС‚РІРёСЏ РїСЂР°РІ
-			if (
-				event.error === "not-allowed" ||
-				event.error === "permission-denied"
-			) {
-				addStatus("РўСЂРµР±СѓРµС‚СЃСЏ СЂР°Р·СЂРµС€РµРЅРёРµ РЅР° РјРёРєСЂРѕС„РѕРЅ.");
-				// РћС‚РєСЂС‹РІР°РµРј СЃС‚СЂР°РЅРёС†Сѓ СЂР°Р·СЂРµС€РµРЅРёСЏ РІ РЅРѕРІРѕР№ РІРєР»Р°РґРєРµ
-				chrome.tabs.create({ url: "permission.html" });
-			}
-		};
-	} else {
-		micBtn.style.display = "none"; // РЎРєСЂС‹С‚СЊ РєРЅРѕРїРєСѓ, РµСЃР»Рё Р±СЂР°СѓР·РµСЂ РЅРµ РїРѕРґРґРµСЂР¶РёРІР°РµС‚
-		console.warn("Web Speech API not supported");
-	}
-
-	micBtn.addEventListener("click", () => {
-		if (!recognition) return;
-
-		if (micBtn.classList.contains("listening")) {
-			recognition.stop();
-		} else {
-			// Р•СЃР»Рё СЃРѕРµРґРёРЅРµРЅРёРµ РµС‰Рµ РЅРµ СѓСЃС‚Р°РЅРѕРІР»РµРЅРѕ, РЅРµ РґР°РµРј РіРѕРІРѕСЂРёС‚СЊ (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)
-			if (!isConnected) {
-				addStatus("Р”РѕР¶РґРёС‚РµСЃСЊ СЃРѕРµРґРёРЅРµРЅРёСЏ СЃ СЃРµСЂРІРµСЂРѕРј.");
-				return;
-			}
-			try {
-				recognition.start();
-			} catch (e) {
-				console.error(e);
-			}
-		}
-	});
+promptInput.addEventListener("keypress", (e) => {
+if (e.key === "Enter") {
+sendMessage();
+}
+});
 });
