@@ -6,10 +6,10 @@
 		<style>
 			:root {
 				--input-bg: #ffffff;
-				--input-border: #dcdcdc;
-				--input-text: #1f1f1f;
-				--input-placeholder: #8a8a8a;
-				--user-text: #ffffff;
+    			--input-border: #dcdcdc;
+    			--input-text: #1f1f1f;
+    			--input-placeholder: #8a8a8a;
+    			--user-text: #ffffff;
 				--bg-main: #f5f5f5;
 				--bg-panel: #ffffff;
 				--text-main: #333;
@@ -22,27 +22,94 @@
 				--thinking-border: #d0d0d0;
 				--thinking-text: #333;
 				--scroll-track: #f0f0f0;
-				--scroll-thumb: #c0c0c0;
+    			--scroll-thumb: #c0c0c0;
 			}
 
-			body.dark {
+			/* --- ТЕМЫ --- */
+
+			/* DARK */
+			[data-theme="dark"] {
 				--bg-main: #1e1e1e;
 				--bg-panel: #2a2a2a;
 				--text-main: #e0e0e0;
-				--border-color: #444;
 				--agent-bg: #2f2f31;
 				--user-bg: #0a84ff;
-				--user-text: #ffffff;
-				--thinking-bg: #232325;
-				--thinking-header-bg: #303032;
-				--thinking-border: #3a3a3c;
-				--thinking-text: #d6d6d6;
-				--input-bg: #1f1f21;
-				--input-border: #3a3a3c;
-				--input-text: #f2f2f2;
-				--input-placeholder: #9a9a9c;
-				--scroll-track: #1c1c1e;
-				--scroll-thumb: #3a3a3c;
+			}
+
+			/* НОВЫЙ ГОД (Красно-зеленая гамма) */
+			[data-theme="new-year"] {
+				--bg-main: #0a2e1c; /* Глубокий зеленый */
+				--bg-panel: #14452f;
+				--text-main: #fff;
+				--agent-bg: #1d5c41;
+				--user-bg: #c41e3a; /* Рождественский красный */
+				--border-color: #2a7a5a;
+			}
+
+			/* 8 МАРТА (Нежно-розовая гамма) */
+			[data-theme="march-8"] {
+				--bg-main: #fff0f5; 
+				--bg-panel: #ffffff;
+				--text-main: #5d3f4a;
+				--agent-bg: #ffe4e1;
+				--user-bg: #ff69b4;
+				--border-color: #ffc0cb;
+			}
+
+			/* 23 ФЕВРАЛЯ (Милитари/Синий стиль) */
+			[data-theme="feb-23"] {
+				--bg-main: #2b302a;
+				--bg-panel: #3c443b;
+				--text-main: #e8e8e8;
+				--agent-bg: #4a5448;
+				--user-bg: #556b2f;
+				--border-color: #6b8e23;
+			}
+
+			/* --- СТИЛИ МЕНЮ --- */
+			.theme-menu-container {
+				position: relative;
+				display: flex;
+				flex-direction: row-reverse; /* Меню будет раскрываться влево от кнопки */
+				align-items: center;
+			}
+
+			.theme-options {
+				display: none; /* Скрыто по умолчанию */
+				background: var(--bg-panel);
+				border: 1px solid var(--border-color);
+				padding: 5px;
+				border-radius: 25px;
+				margin-right: 10px;
+				gap: 5px;
+				box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+				animation: slideIn 0.2s ease;
+			}
+
+			.theme-options.active {
+				display: flex;
+			}
+
+			.theme-opt {
+				all: unset;
+				cursor: pointer;
+				font-size: 18px;
+				width: 32px;
+				height: 32px;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				border-radius: 50%;
+				transition: background 0.2s;
+			}
+
+			.theme-opt:hover {
+				background: rgba(0,0,0,0.1);
+			}
+
+			@keyframes slideIn {
+				from { opacity: 0; transform: translateX(20px); }
+				to { opacity: 1; transform: translateX(0); }
 			}
 
 			body {
@@ -55,7 +122,8 @@
 				flex-direction: column;
 				height: 100vh;
 				background-color: var(--bg-main);
-				color: var(--text-main);
+    			color: var(--text-main);
+				transition: background-color 0.3s ease, color 0.3s ease;
 			}
 
 			#chat-container {
@@ -65,6 +133,8 @@
 				display: flex;
 				flex-direction: column;
 				gap: 10px;
+				/* Добавляем внутренний отступ сверху, чтобы создать место для кнопок */
+				padding-top: 60px;
 			}
 
 			.message {
@@ -88,50 +158,7 @@
 				border-bottom-left-radius: 5px;
 				box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 				background-color: var(--agent-bg);
-				color: var(--text-main);
-			}
-
-			/* Markdown Styles */
-			.agent-message p {
-				margin: 0 0 10px 0;
-			}
-			.agent-message p:last-child {
-				margin-bottom: 0;
-			}
-			.agent-message code {
-				background-color: rgba(0, 0, 0, 0.1);
-				padding: 2px 4px;
-				border-radius: 3px;
-				font-family: monospace;
-			}
-			.agent-message pre {
-				background-color: #f4f4f4;
-				padding: 10px;
-				border-radius: 5px;
-				overflow-x: auto;
-				margin: 10px 0;
-			}
-			.agent-message pre code {
-				background-color: transparent;
-				padding: 0;
-			}
-			body.dark .agent-message code {
-				background-color: rgba(255, 255, 255, 0.1);
-			}
-			body.dark .agent-message pre {
-				background-color: #2d2d2d;
-			}
-			.agent-message ul,
-			.agent-message ol {
-				margin: 0 0 10px 20px;
-				padding: 0;
-			}
-			.agent-message a {
-				color: #007aff;
-				text-decoration: none;
-			}
-			.agent-message a:hover {
-				text-decoration: underline;
+    			color: var(--text-main);
 			}
 
 			.thinking-container {
@@ -145,7 +172,7 @@
 				box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 				animation: fadeIn 0.3s ease-out;
 				background-color: var(--thinking-bg);
-				border: 1px solid var(--thinking-border);
+    			border: 1px solid var(--thinking-border);
 			}
 
 			@keyframes fadeIn {
@@ -169,7 +196,7 @@
 				font-weight: 600;
 				user-select: none;
 				transition: background-color 0.2s;
-				color: var(--thinking-text);
+    			color: var(--thinking-text);
 				background-color: var(--thinking-header-bg);
 			}
 
@@ -188,7 +215,7 @@
 				max-height: 300px;
 				overflow-y: auto;
 				background-color: var(--thinking-bg);
-				color: var(--thinking-text);
+    			color: var(--thinking-text);
 			}
 
 			.thinking-content.collapsed {
@@ -203,7 +230,7 @@
 				margin-left: 2px;
 				font-size: 10px;
 				color: var(--thinking-text);
-				opacity: 0.6;
+    			opacity: 0.6;
 			}
 
 			@keyframes blink {
@@ -229,16 +256,7 @@
 				display: flex;
 				gap: 10px;
 				background-color: var(--bg-panel);
-				border-top: 1px solid var(--border-color);
-			}
-
-			#theme-toggle {
-				position: absolute;
-				top: 10px;
-				right: 10px;
-				cursor: pointer;
-				font-size: 18px;
-				user-select: none;
+    			border-top: 1px solid var(--border-color);
 			}
 
 			#prompt-input {
@@ -248,8 +266,8 @@
 				outline: none;
 				font-size: 14px;
 				background-color: var(--input-bg);
-				color: var(--input-text);
-				border: 1px solid var(--input-border);
+    			color: var(--input-text);
+    			border: 1px solid var(--input-border);
 			}
 
 			#prompt-input:focus {
@@ -306,6 +324,7 @@
 			#mic-btn {
 				background-color: transparent; /* Или var(--input-bg) если хотите фон */
 				color: #007aff;
+				border: 1px solid var(--border-color); /* Опционально, можно убрать */
 				border: none;
 				border-radius: 50%;
 				width: 36px;
@@ -339,30 +358,15 @@
 			}
 
 			@keyframes pulse {
-				0% {
-					transform: scale(1);
-					box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7);
-				}
-				70% {
-					transform: scale(1.1);
-					box-shadow: 0 0 0 6px rgba(255, 59, 48, 0);
-				}
-				100% {
-					transform: scale(1);
-					box-shadow: 0 0 0 0 rgba(255, 59, 48, 0);
-				}
+				0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7); }
+				70% { transform: scale(1.1); box-shadow: 0 0 0 6px rgba(255, 59, 48, 0); }
+				100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 59, 48, 0); }
 			}
-
-			/* В темной теме поправим цвет иконки */
-			body.dark #mic-btn svg {
-				fill: #9a9a9c;
-			}
-			body.dark #mic-btn:hover svg {
-				fill: #0a84ff;
-			}
+			
 			::-webkit-scrollbar {
 				width: 8px;
 			}
+
 			::-webkit-scrollbar-track {
 				background: var(--scroll-track);
 			}
@@ -371,25 +375,77 @@
 				background-color: var(--scroll-thumb);
 				border-radius: 10px;
 			}
+
+			/* Контейнер-родитель: теперь он управляет расположением */
+			.top-controls {
+				position: absolute;
+				top: 12px;
+				right: 12px;
+				display: flex !important;
+				gap: 10px;
+				z-index: 9999;
+				/* Добавим полупрозрачный фон под кнопками (опционально), 
+				чтобы они лучше читались на фоне текста при скролле */
+				padding: 5px;
+				border-radius: 20px;
+			}
+
+			/* Сами кнопки */
+			.icon-button {
+				all: unset; /* Сброс стандартных стилей */
+				background-color: #208cff;
+				color: white;
+				width: 34px;
+				height: 34px;
+				border-radius: 50%;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				cursor: pointer;
+				font-size: 16px;
+				transition: transform 0.1s, background-color 0.2s;
+				box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+				/* Убеждаемся, что нет абсолютного позиционирования здесь */
+				position: relative !important; 
+			}
+
+			/* Эффект при наведении */
+			.icon-button:hover {
+				background-color: #0066d6;
+				transform: scale(1.05);
+			}
+
+			.icon-button:active {
+				transform: translateY(0);
+			}
+
+			/* Чтобы кнопки не перекрывали текст сообщения */
+			.message.agent:first-child {
+				padding-right: 80px; /* Резервируем место под кнопки в первом сообщении */
+			}
+			
+			.message:first-child {
+				margin-top: 0;
+			}
+
+			.message, #input-area, .thinking-container {
+				transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+			}
 		</style>
 	</head>
 	<body>
-		<div
-			style="
-				display: flex;
-				justify-content: space-between;
-				padding: 10px 15px 0 15px;
-			"
-		>
-			<div id="theme-toggle" title="Toggle theme" style="cursor: pointer">
-				🌙
-			</div>
-			<div
-				id="clear-history"
-				title="Clear history"
-				style="cursor: pointer"
-			>
-				🗑️
+		<div class="top-controls">
+			<button id="mute-toggle" class="icon-button" title="Озвучка">🔊</button>
+			
+			<div class="theme-menu-container">
+				<button id="theme-menu-btn" class="icon-button" title="Выбрать тему">🎨</button>
+				<div id="theme-options" class="theme-options">
+					<button class="theme-opt" data-theme="light" title="Светлая">☀️</button>
+					<button class="theme-opt" data-theme="dark" title="Темная">🌙</button>
+					<button class="theme-opt" data-theme="new-year" title="Новый Год">🎄</button>
+					<button class="theme-opt" data-theme="march-8" title="8 Марта">🌸</button>
+					<button class="theme-opt" data-theme="feb-23" title="23 Февраля">🎖️</button>
+				</div>
 			</div>
 		</div>
 		<div id="chat-container">
@@ -401,12 +457,8 @@
 		<div id="input-area">
 			<button id="mic-btn" title="Голосовой ввод">
 				<svg viewBox="0 0 24 24">
-					<path
-						d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 2.34 9 5v6c0 1.66 1.34 3 3 3z"
-					/>
-					<path
-						d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"
-					/>
+					<path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 2.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+					<path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
 				</svg>
 			</button>
 
@@ -416,13 +468,13 @@
 				placeholder="Введите задачу..."
 				autocomplete="off"
 			/>
-
+			
 			<button id="stop-btn" title="Остановить">
 				<svg viewBox="0 0 24 24">
 					<rect x="6" y="6" width="12" height="12"></rect>
 				</svg>
 			</button>
-
+			
 			<button id="send-btn">
 				<svg viewBox="0 0 24 24">
 					<path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>

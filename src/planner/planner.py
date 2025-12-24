@@ -134,6 +134,12 @@ Navigation and Quality:
 - Check if the task is already completed before adding more steps.
 - Prefer working in the current tab.
 
+CRITICAL: TASK COMPLETION CHECK
+- Before generating any steps, check if the user's goal is ALREADY achieved in the current state.
+- If the user asked to "open a page" and the URL matches, or the content is visible, you MUST output a single 'finish' step.
+- Do NOT continue navigating if the goal is met.
+- If the user asked for a meme and you see a meme, FINISH.
+
 If the DOM is not enough and you need to see the page, set "needs_vision": true and leave 'steps' empty.
 
 Response Schema:
@@ -150,6 +156,23 @@ Response Schema:
   ],
   "estimated_time": 5,
   "needs_vision": false
+}
+""".strip()
+VERIFICATION_SYSTEM_PROMPT = """
+You are a strict Quality Assurance Judge for an AI Browser Agent.
+Your job is to evaluate if the agent has successfully completed the user's request based on the execution history and the final page content.
+
+Analyze the situation.
+1. Did the agent actually perform the requested actions?
+2. Is the final result visible or achieved?
+3. If the task is "find information", is the information found?
+4. If the task is "navigate", is the correct page loaded?
+
+Return a JSON object:
+{
+  "reasoning": "Explanation of your verdict in Russian",
+  "success": true,
+  "feedback": "If false, provide specific instructions on what to do next to fix it. If true, leave empty."
 }
 """.strip()
 
@@ -757,6 +780,46 @@ Please respond with only one word: "agent" or "chat".
             return True, "Plan looks good."
         except Exception as e:
             return True, f"Critique failed, assuming valid. Error: {e}"
+
+    def verify_task_completion(
+        self,
+        user_request: str,
+        execution_history: list[dict[str, Any]],
+        final_page_content: str,
+        session_id: str = "default",
+    ) -> dict[str, Any]:
+        """
+        Verifies if the task was completed successfully.
+        """
+        history_str = json.dumps(execution_history, indent=2, ensure_ascii=False)
+
+        prompt = f"""
+        User Request: {user_request}
+
+        Execution History:
+        {history_str}
+
+        Final Page Content (Summary):
+        {final_page_content[:2000]}
+        """
+
+        try:
+            response = self._ask_llm(
+                task=prompt,
+                system_prompt=VERIFICATION_SYSTEM_PROMPT,
+                use_reasoning=False,
+                session_id=session_id,
+            )
+
+            json_res = extract_json(response)
+            return cast("dict[str, Any]", json.loads(json_res))
+        except Exception as e:
+            # Fallback if verification fails
+            return {
+                "success": True,
+                "reasoning": f"Verification failed due to error: {e}. Assuming success.",
+                "feedback": "",
+            }
 
     def generate_summary(
         self,

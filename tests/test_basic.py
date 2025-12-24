@@ -77,11 +77,11 @@ def test_prompts() -> None:
     unsucces = []
     for idx, obj in enumerate(data, 1):
         Path("tests/result.json").write_text(request(obj["query"]), encoding="utf8")
-        
+
         result_content = Path("tests/result.json").read_text(encoding="utf8")
         judge_content = judge(result_content)
         Path("tests/judge_answer.json").write_text(judge_content, encoding="utf8")
-        
+
         with Path("tests/judge_answer.json").open(encoding="utf-8") as f:
             answer = json.load(f)
 
@@ -113,7 +113,7 @@ def test_prompts() -> None:
     print(
         f"Затрачено токенов: {summary_tokens}. Среднее количество токенов: {summary_tokens / total:.2f}"
     )
-    
+
     log_path = Path("tests/logs") / (time.strftime("%Y%m%d_%H%M%S") + ".log")
     log_path.parent.mkdir(exist_ok=True, parents=True)
     with log_path.open("w", encoding="utf8") as f:

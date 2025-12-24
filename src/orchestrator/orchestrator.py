@@ -2,7 +2,6 @@ import datetime
 import json
 import logging
 import uuid
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from src.browser.browser_controller import BrowserController, BrowserOptions
@@ -174,7 +173,7 @@ class Orchestrator:
             step_count = 0
 
             # Memory of executed steps for cycle detection
-            execution_history = []
+            execution_history: list[dict[str, Any]] = []
             final_page_content = ""
 
             while plan.steps and step_count < max_steps:
@@ -184,31 +183,6 @@ class Orchestrator:
                     break
 
                 step = plan.steps[0]  # Always take the first step of the current plan
-
-                if step.action == "finish":
-                    logger.info(f"Task completed: {step.description}")
-
-                    # Extract content for summary
-                    try:
-                        final_page_content = page.evaluate("document.body.innerText")
-                        if len(final_page_content) > 5000:
-                            final_page_content = final_page_content[:5000] + "..."
-                    except Exception:
-                        final_page_content = "Could not extract content."
-
-                    result = f"Task Completed. Final Page Content Summary: {final_page_content[:500]}"  # Short summary for result
-                    results.append(result)
-
-                    # Add to history so memory saver knows we finished
-                    execution_history.append(
-                        {
-                            "description": step.description,
-                            "action": "finish",
-                            "result": "Task Completed Successfully",
-                            "url": page.url,
-                        }
-                    )
-                    break
 
                 step_count += 1
 
@@ -247,6 +221,45 @@ class Orchestrator:
                     result = f"User answered: {user_answer}"
                     logger.info(f"User answer received: {user_answer}")
 
+                elif step.action == "finish":
+                    logger.info(f"Task completed: {step.description}")
+                    # Extract content
+                    try:
+                        final_page_content = page.evaluate("document.body.innerText")
+                        if len(final_page_content) > 5000:
+                            final_page_content = final_page_content[:5000] + "..."
+                    except Exception:
+                        final_page_content = "Could not extract content."
+
+                    # Verification
+                    report_status("Verifying task completion...")
+                    verification = self.planner.verify_task_completion(
+                        user_request,
+                        execution_history,
+                        final_page_content,
+                        session_id=session_id,
+                    )
+
+                    if verification["success"]:
+                        result = f"Task Completed. Final Page Content Summary: {final_page_content[:500]}"
+                        results.append(result)
+                        execution_history.append(
+                            {
+                                "description": step.description,
+                                "action": "finish",
+                                "result": "Task Completed Successfully",
+                                "url": page.url,
+                            }
+                        )
+                        break
+                    else:
+                        logger.warning(
+                            f"Verification failed: {verification['reasoning']}"
+                        )
+                        result = f"Self-Correction: I thought I was done, but verification failed. Reason: {verification['reasoning']}. Feedback: {verification['feedback']}"
+                        # Force replan by clearing steps
+                        plan.steps = []
+
                 # Handle 'extract' action specifically
                 elif step.action == "extract":
                     logger.info(f"Executing Extraction: {step.description}")
@@ -280,46 +293,69 @@ class Orchestrator:
                             if method == "create_event":
                                 # Convert strings to datetime
                                 if "start_time" in args:
-                                    args["start_time"] = datetime.datetime.fromisoformat(args["start_time"])
+                                    args["start_time"] = (
+                                        datetime.datetime.fromisoformat(
+                                            args["start_time"]
+                                        )
+                                    )
                                 if "end_time" in args:
-                                    args["end_time"] = datetime.datetime.fromisoformat(args["end_time"])
+                                    args["end_time"] = datetime.datetime.fromisoformat(
+                                        args["end_time"]
+                                    )
 
                                 calendar_result = self.calendar.create_event(**args)
                             elif method == "list_events_for_date":
                                 # Convert string to date if provided
                                 if "date" in args and isinstance(args["date"], str):
-                                    args["date"] = datetime.date.fromisoformat(args["date"])
-                                calendar_result = self.calendar.list_events_for_date(**args)
+                                    args["date"] = datetime.date.fromisoformat(
+                                        args["date"]
+                                    )
+                                calendar_result = self.calendar.list_events_for_date(
+                                    **args
+                                )
                             elif method == "delete_event":
                                 calendar_result = self.calendar.delete_event(**args)
                             elif method == "set_date":
                                 # Convert string to date if provided
                                 if "date" in args and isinstance(args["date"], str):
-                                    args["date"] = datetime.date.fromisoformat(args["date"])
+                                    args["date"] = datetime.date.fromisoformat(
+                                        args["date"]
+                                    )
                                 calendar_result = self.calendar.set_date(**args)
                             elif method == "get_current_date":
                                 calendar_result = self.calendar.get_current_date()
                             elif method == "update_event":
                                 # Convert strings to datetime if provided
                                 if "start_time" in args:
-                                    args["start_time"] = datetime.datetime.fromisoformat(args["start_time"])
+                                    args["start_time"] = (
+                                        datetime.datetime.fromisoformat(
+                                            args["start_time"]
+                                        )
+                                    )
                                 if "end_time" in args:
-                                    args["end_time"] = datetime.datetime.fromisoformat(args["end_time"])
+                                    args["end_time"] = datetime.datetime.fromisoformat(
+                                        args["end_time"]
+                                    )
                                 calendar_result = self.calendar.update_event(**args)
                             elif method == "open_calendar":
                                 # Convert string to date if provided
                                 if "date" in args and isinstance(args["date"], str):
-                                    args["date"] = datetime.date.fromisoformat(args["date"])
+                                    args["date"] = datetime.date.fromisoformat(
+                                        args["date"]
+                                    )
                                 calendar_result = self.calendar.open_calendar(**args)
                             else:
-                                calendar_result = {"status": "error", "message": f"Unknown method: {method}"}
+                                calendar_result = {
+                                    "status": "error",
+                                    "message": f"Unknown method: {method}",
+                                }
                         else:
                             calendar_result = f"Unknown tool: {tool_name}"
 
                         result = str(calendar_result)
 
                     except json.JSONDecodeError:
-                        result = "Error: Description must be valid JSON for call_tool action. Example: {\"tool\": \"google_calendar\", \"method\": \"create_event\", \"args\": {\"summary\": \"Meeting\", \"start_time\": \"2023-10-27T10:00:00\", \"end_time\": \"2023-10-27T11:00:00\"}}"
+                        result = 'Error: Description must be valid JSON for call_tool action. Example: {"tool": "google_calendar", "method": "create_event", "args": {"summary": "Meeting", "start_time": "2023-10-27T10:00:00", "end_time": "2023-10-27T11:00:00"}}'
                     except Exception as e:
                         result = f"Tool execution failed: {e}"
 
