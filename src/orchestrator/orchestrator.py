@@ -593,7 +593,7 @@ class Orchestrator:
                     # 1. Check for immediate repetition (A -> A)
                     # We check the last 3 entries to see if the current one matches ANY of them with the same result
                     # This catches A -> A and A -> B -> A if results are same (e.g. "No changes")
-                    for i, prev in enumerate(execution_history[:-1][-3:]):
+                    for _i, prev in enumerate(execution_history[:-1][-3:]):
                         if (
                             prev["description"] == last_entry["description"]
                             and prev["action"] == last_entry["action"]
@@ -603,15 +603,15 @@ class Orchestrator:
                             break
 
                     # 2. Check for alternating loops (A -> B -> A -> B)
-                    if not cycle_warning and len(execution_history) >= 4:
-                        # Check if [last-3, last-2] == [last-1, last]
-                        if (
-                            execution_history[-1]["description"]
-                            == execution_history[-3]["description"]
-                            and execution_history[-2]["description"]
-                            == execution_history[-4]["description"]
-                        ):
-                            cycle_warning = "CRITICAL: Alternating loop detected (A -> B -> A -> B). You are stuck in a loop. Stop and try a completely different approach."
+                    if (
+                        not cycle_warning
+                        and len(execution_history) >= 4
+                        and execution_history[-1]["description"]
+                        == execution_history[-3]["description"]
+                        and execution_history[-2]["description"]
+                        == execution_history[-4]["description"]
+                    ):
+                        cycle_warning = "CRITICAL: Alternating loop detected (A -> B -> A -> B). You are stuck in a loop. Stop and try a completely different approach."
 
                     # 3. Check for repeated failures
                     if "Failed" in last_entry["result"]:
