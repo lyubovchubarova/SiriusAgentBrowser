@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+import time
 import uuid
 from typing import TYPE_CHECKING, Any, cast
 
@@ -70,6 +71,7 @@ class Orchestrator:
         chat_history: list[dict[str, str]] | None = None,
         status_callback: Any = None,
         stream_callback: Any = None,
+        max_execution_time: int = 180,
     ) -> str:
         """
         Обрабатывает пользовательский запрос.
@@ -155,12 +157,21 @@ class Orchestrator:
             # Dynamic execution loop
             max_steps = 20  # Safety limit
             step_count = 0
+            start_time = time.time()
 
             # Memory of executed steps for cycle detection
             execution_history: list[dict[str, Any]] = []
             final_page_content = ""
 
             while plan.steps and step_count < max_steps:
+                # Check for timeout
+                if time.time() - start_time > max_execution_time:
+                    logger.warning(f"Execution timed out after {max_execution_time}s.")
+                    results.append(
+                        f"Execution stopped: Timeout ({max_execution_time}s exceeded)."
+                    )
+                    break
+
                 if self._stop_requested:
                     logger.info("Execution stopped by user request.")
                     results.append("Execution stopped by user.")
