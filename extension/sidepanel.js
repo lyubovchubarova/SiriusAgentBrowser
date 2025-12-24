@@ -5,7 +5,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	const sendBtn = document.getElementById("send-btn");
 	const stopBtn = document.getElementById("stop-btn");
 	const micBtn = document.getElementById("mic-btn");
-
+	
 	// Темы
 	const themeMenuBtn = document.getElementById("theme-menu-btn");
 	const themeOptions = document.getElementById("theme-options");
@@ -30,7 +30,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	let isMuted = localStorage.getItem("isMuted") === "true";
 
 	// --- ИНИЦИАЛИЗАЦИЯ ---
-
+	
 	// 1. Темы
 	function applyTheme(theme) {
 		if (theme === "light") {
@@ -55,7 +55,7 @@ document.addEventListener("DOMContentLoaded", () => {
 		}
 	});
 
-	themeBtns.forEach((btn) => {
+	themeBtns.forEach(btn => {
 		btn.addEventListener("click", () => {
 			const theme = btn.dataset.theme;
 			applyTheme(theme);
@@ -81,12 +81,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
 	function speakText(text) {
 		if (isMuted || !text) return;
-
+		
 		// Очистка текста от markdown символов для озвучки
 		const cleanText = text.replace(/[*#`_\[\]]/g, "");
-
+		
 		const utterance = new SpeechSynthesisUtterance(cleanText);
 		utterance.lang = "ru-RU";
+		utterance.rate = 1.7;     // Скорость речи (0.1 до 10)
+		utterance.pitch = 1;    // Тональность (0 до 2)
 		window.speechSynthesis.speak(utterance);
 	}
 
@@ -109,6 +111,12 @@ document.addEventListener("DOMContentLoaded", () => {
 			const transcript = event.results[0][0].transcript;
 			promptInput.value = transcript;
 			promptInput.focus();
+
+			setTimeout(() => {
+				if (transcript.trim()) {
+					sendMessage();
+				}
+			}, 100);
 		};
 
 		recognition.onerror = (event) => {
@@ -171,7 +179,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	function addMessage(text, type) {
 		const div = document.createElement("div");
 		div.className = `message ${type}-message`;
-
+		
 		if (type === "agent" && typeof marked !== "undefined") {
 			div.innerHTML = marked.parse(text);
 			// Озвучиваем ответ агента
@@ -179,7 +187,7 @@ document.addEventListener("DOMContentLoaded", () => {
 		} else {
 			div.textContent = text;
 		}
-
+		
 		chatContainer.appendChild(div);
 		chatContainer.scrollTop = chatContainer.scrollHeight;
 	}
@@ -216,8 +224,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 			const header = document.createElement("div");
 			header.className = "thinking-header";
-			header.innerHTML =
-				'<span>Thinking Process</span><span class="toggle-icon">▼</span>';
+			header.innerHTML = '<span>Thinking Process</span><span class="toggle-icon">▼</span>';
 
 			const content = document.createElement("div");
 			content.className = "thinking-content";
