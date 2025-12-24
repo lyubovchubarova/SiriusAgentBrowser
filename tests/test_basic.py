@@ -16,6 +16,13 @@ YANDEX_CLOUD_FOLDER = os.getenv("YANDEX_CLOUD_FOLDER")
 YANDEX_CLOUD_API_KEY = os.getenv("YANDEX_CLOUD_API_KEY")
 YANDEX_CLOUD_MODEL = "qwen3-235b-a22b-fp8/latest"
 
+TIMEOUT_SECONDS = {
+    "easy": 180,
+    "medium": 360,
+    "hard": 900,
+    "edge": 360,
+}
+
 TESTS_PROMPTS_PATH = pathlib.Path("tests/test_requests.json")
 
 TEMP_RESULT_PATH = pathlib.Path("tests/result.json")
@@ -23,12 +30,22 @@ TEMP_JUDGE_PATH = pathlib.Path("tests/judge_answer.json")
 LOGS_PATH = pathlib.Path("tests/logs/" + time.strftime("%Y%m%d_%H%M%S") + ".log")
 
 
-def request(prompt: str) -> str:
-    subprocess.run(
-        [sys.executable, "src/main.py", prompt],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+def request(prompt: str, seconds: int) -> str:
+    try:
+        subprocess.run(
+            [sys.executable, "src/main.py", prompt],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=seconds,
+            check=True,
+        )
+    except subprocess.TimeoutExpired:
+        # вернём JSON, который сигнализирует о таймауте
+        return json.dumps({"request": prompt, "objects": [], "timeout": True}, ensure_ascii=False)
+    except subprocess.CalledProcessError as e:
+        return json.dumps(
+            {"request": prompt, "objects": [], "error": f"exit_code:{e.returncode}"}, ensure_ascii=False
+        )
     db = "logs.db"
     q1 = "SELECT session_id FROM action_logs ORDER BY id DESC LIMIT 1"
     q2 = "SELECT component, action_type, message, details FROM action_logs WHERE session_id = ?"
@@ -80,7 +97,7 @@ def test_prompts() -> None:
     bar = tqdm.tqdm(total=total, desc="Tests", unit="req")
     unsucces = []
     for idx, obj in enumerate(data, 1):
-        TEMP_RESULT_PATH.open("w", encoding="utf8").write(request(obj["query"]))
+        TEMP_RESULT_PATH.open("w", encoding="utf8").write(request(obj["query"], TIMEOUT_SECONDS[obj["difficulty"]]))
         TEMP_JUDGE_PATH.open("w", encoding="utf8").write(
             judge(TEMP_RESULT_PATH.open("r", encoding="utf8").read())
         )
@@ -90,7 +107,7 @@ def test_prompts() -> None:
         if answer.get("result") == "OK":
             succes += 1
         else:
-            unsucces.append(obj["id"])
+            unsucces.append(obj)
 
         con = sqlite3.connect("logs.db")
         cur = con.cursor()
@@ -119,7 +136,7 @@ def test_prompts() -> None:
             f"Затрачено токенов: {summary_tokens}. Среднее количество токенов: {summary_tokens / total:.2f}",
             file=f,
         )
-        print(unsucces, file=f)
+        print(*unsucces, sep="\n", file=f)
 
 
 if __name__ == "__main__":
