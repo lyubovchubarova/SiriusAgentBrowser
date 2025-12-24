@@ -721,6 +721,24 @@ Example: [1, 3, 5, 9] (where 9 is the button)
                 except Exception as e:
                     return f"Error typing: {e}"
 
+            elif step.action == "send_keys":
+                keys = step.description
+                # Extract keys from description if formatted like "Press 'Enter'"
+                match = re.search(r"['\"](.*?)['\"]", step.description)
+                if match:
+                    keys = match.group(1)
+
+                # Handle common keys mapping if needed, but Playwright handles most strings
+                # like "Enter", "Tab", "ArrowDown", "Control+a"
+
+                try:
+                    print(f"Sending keys: {keys}")
+                    page.keyboard.press(keys)
+                    time.sleep(1)
+                    return f"Sent keys: {keys}"
+                except Exception as e:
+                    return f"Failed to send keys '{keys}': {e}"
+
             elif step.action == "click":
                 target_text = None
                 match = re.search(r"['\"](.*?)['\"]", step.description)
