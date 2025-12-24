@@ -7,6 +7,7 @@ from pathlib import Path
 
 import dotenv
 import openai
+import pytest
 from tqdm import tqdm  # type: ignore
 
 dotenv.load_dotenv()
@@ -66,6 +67,10 @@ def judge(response: str) -> str:
 
 
 def test_prompts() -> None:
+    # Skip in CI or local runs without Yandex Cloud creds to avoid OpenAIError
+    if not YANDEX_CLOUD_API_KEY or not YANDEX_CLOUD_FOLDER:
+        pytest.skip("YANDEX_CLOUD_API_KEY or YANDEX_CLOUD_FOLDER not set")
+
     with Path("tests/test_requests.json").open(encoding="utf-8") as f:
         data = json.load(f)
 
