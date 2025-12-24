@@ -599,16 +599,38 @@ class Orchestrator:
                         f"\n[PLANNER LOG] Updating plan based on history ({len(execution_history)} steps):\n{history_str.encode('ascii', 'replace').decode('ascii')}"
                     )
 
-                # Simple cycle detection
-                # If the exact same action description and result happened in the last 3 steps (excluding current), warn
+                # Robust cycle detection
                 cycle_warning = ""
                 if len(execution_history) > 1:
                     last_entry = execution_history[-1]
 
-                    # Check for repeated failures
+                    # 1. Check for immediate repetition (A -> A)
+                    # We check the last 3 entries to see if the current one matches ANY of them with the same result
+                    # This catches A -> A and A -> B -> A if results are same (e.g. "No changes")
+                    for i, prev in enumerate(execution_history[:-1][-3:]):
+                        if (
+                            prev["description"] == last_entry["description"]
+                            and prev["action"] == last_entry["action"]
+                            and prev["result"] == last_entry["result"]
+                        ):
+                            cycle_warning = f"CRITICAL: Loop detected. You have already performed '{last_entry['description']}' with the same result. You MUST change your strategy. Do NOT repeat this action."
+                            break
+
+                    # 2. Check for alternating loops (A -> B -> A -> B)
+                    if not cycle_warning and len(execution_history) >= 4:
+                        # Check if [last-3, last-2] == [last-1, last]
+                        if (
+                            execution_history[-1]["description"]
+                            == execution_history[-3]["description"]
+                            and execution_history[-2]["description"]
+                            == execution_history[-4]["description"]
+                        ):
+                            cycle_warning = "CRITICAL: Alternating loop detected (A -> B -> A -> B). You are stuck in a loop. Stop and try a completely different approach."
+
+                    # 3. Check for repeated failures
                     if "Failed" in last_entry["result"]:
                         fail_count = 0
-                        for h in execution_history[-3:]:
+                        for h in execution_history[-5:]:  # Look further back
                             if (
                                 "Failed" in h["result"]
                                 and h["description"] == last_entry["description"]
@@ -617,28 +639,10 @@ class Orchestrator:
 
                         if fail_count >= 2:
                             cycle_warning = "CRITICAL: You are repeatedly failing with the same action. You MUST change strategy. Do NOT try the same action again."
-                            # Human-in-the-loop: Ask user for help if stuck
                             print("\n" + "!" * 50)
                             print("AGENT IS STUCK. Please provide a hint or strategy.")
                             print(f"Last error: {last_entry['result']}")
-                            # user_hint = input(
-                            #     "Your hint (or press Enter to continue): "
-                            # )
-                            # if user_hint.strip():
-                            #     cycle_warning += f"\nUSER HINT: {user_hint}"
                             print("!" * 50 + "\n")
-
-                    # Check previous entries for exact duplicates
-                    if not cycle_warning:
-                        for prev in execution_history[:-1][
-                            -3:
-                        ]:  # Look at last 3 before current
-                            if (
-                                prev["description"] == last_entry["description"]
-                                and prev["result"] == last_entry["result"]
-                            ):
-                                cycle_warning = "WARNING: It seems you are repeating the same action with the same result. You MUST try a different approach."
-                                break
 
                 if cycle_warning:
                     history_str += f"\n{cycle_warning}"
@@ -717,6 +721,40 @@ class Orchestrator:
                             status_callback=stream_callback,
                             session_id=session_id,
                         )
+
+                    # Loop Prevention Check: Prevent immediate repetition of the last step
+                    if new_plan.steps and execution_history:
+                        last_step = execution_history[-1]
+                        next_step = new_plan.steps[0]
+
+                        if (
+                            next_step.description == last_step["description"]
+                            and next_step.action == last_step["action"]
+                        ):
+                            logger.warning(
+                                f"Planner proposed a repeated step: {next_step.description}. Forcing replan."
+                            )
+                            full_context_str += f"\nCRITICAL ERROR: You just proposed to '{next_step.description}' (Action: {next_step.action}), but you JUST did that. You MUST do something different."
+
+                            # Re-run update_plan with the error message
+                            # Use existing screenshot path if available
+                            current_screenshot = (
+                                real_screenshot_path
+                                if "real_screenshot_path" in locals()
+                                else None
+                            )
+
+                            new_plan = self.planner.update_plan(
+                                task=user_request,
+                                last_step_desc=step.description,
+                                last_step_result=result,
+                                current_url=current_url,
+                                dom_elements=dom_str,
+                                history=full_context_str,
+                                screenshot_path=current_screenshot,
+                                status_callback=stream_callback,
+                                session_id=session_id,
+                            )
 
                     # 3. Critique Step (Self-Correction)
                     # Only critique if plan is not empty and not just "extract"
