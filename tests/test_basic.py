@@ -1,20 +1,30 @@
 import json
+import os
+import pathlib
 import shlex
 import sqlite3
 import subprocess
-import openai
-import dotenv
-import os
-from tqdm import tqdm
 import time
+from typing import Any
+
+import dotenv
+import openai
+import tqdm
+
 
 dotenv.load_dotenv()
 YANDEX_CLOUD_FOLDER = os.getenv("YANDEX_CLOUD_FOLDER")
 YANDEX_CLOUD_API_KEY = os.getenv("YANDEX_CLOUD_API_KEY")
 YANDEX_CLOUD_MODEL = "qwen3-235b-a22b-fp8/latest"
 
+TESTS_PROMPTS_PATH = pathlib.Path("tests/test_requests.json")
 
-def request(prompt):
+TEMP_RESULT_PATH = pathlib.Path("tests/result.json")
+TEMP_JUDGE_PATH = pathlib.Path("tests/judge_answer.json")
+LOGS_PATH = pathlib.Path("tests/logs/" + time.strftime("%Y%m%d_%H%M%S") + ".log")
+
+
+def request(prompt: str) -> str:
     subprocess.run(
         shlex.split(f'venv/Scripts/python src/main.py "{prompt}"'),
         stdout=subprocess.DEVNULL,
@@ -34,7 +44,7 @@ def request(prompt):
     return json.dumps({"request": prompt, "objects": rows}, ensure_ascii=False, indent=2)
 
 
-def judge(response):
+def judge(response: str) -> str:
     system_prompt = (
         "Ты судья для тестов браузерного агента.\n"
         "На вход подаётся JSON с шагами агента.\n"
@@ -50,44 +60,37 @@ def judge(response):
         project=YANDEX_CLOUD_FOLDER
     )
 
-    response = client.responses.create(
+    return client.responses.create(
         model=f"gpt://{YANDEX_CLOUD_FOLDER}/{YANDEX_CLOUD_MODEL}",
         temperature=0.3,
         instructions=system_prompt,
         input=response,
-    )
-    return response.output_text
+    ).output_text
 
-
-def test_prompts():
-    with open("tests/test_requests.json", "r", encoding="utf-8") as f:
+def test_prompts() -> None:
+    with TESTS_PROMPTS_PATH.open("r", encoding="utf-8") as f:
         data = json.load(f)
 
     succes = 0
     summary_tokens = 0
     total = len(data)
 
-    bar = tqdm(total=total, desc="Tests", unit="req")
+    bar = tqdm.tqdm(total=total, desc="Tests", unit="req")
     unsucces = []
     for idx, obj in enumerate(data, 1):
-        open("tests/result.json", "w", encoding="utf8").write(
+        TEMP_RESULT_PATH.open("w", encoding="utf8").write(
             request(obj["query"])
         )
-        while True:
-            try:
-                open("tests/judge_answer.json", "w", encoding="utf8").write(
-                    judge(open("tests/result.json", "r", encoding="utf8").read())
-                )
-                with open("tests/judge_answer.json", "r", encoding="utf-8") as f:
-                    answer = json.load(f)
+        TEMP_JUDGE_PATH.open("w", encoding="utf8").write(
+            judge(TEMP_RESULT_PATH.open("r", encoding="utf8").read())
+        )
+        with TEMP_JUDGE_PATH.open("r", encoding="utf-8") as f:
+            answer = json.load(f)
 
-                if answer.get("result") == "OK":
-                    succes += 1
-                else:
-                    unsucces.append(obj["id"])
-                break
-            except Exception as e:
-                print(e)
+        if answer.get("result") == "OK":
+            succes += 1
+        else:
+            unsucces.append(obj["id"])
 
         con = sqlite3.connect("logs.db")
         cur = con.cursor()
@@ -104,7 +107,7 @@ def test_prompts():
     bar.close()
     print(f"Итог: {succes}/{total} успешных ({succes / total * 100:.2f}%)")
     print(f"Затрачено токенов: {summary_tokens}. Среднее количество токенов: {summary_tokens / total:.2f}")
-    with open("tests/logs/" + time.strftime("%Y%m%d_%H%M%S") + ".log", "w", encoding="utf8") as f:
+    with LOGS_PATH.open("w", encoding="utf8") as f:
         print(f"Итог: {succes}/{total} успешных ({succes / total * 100:.2f}%)", file=f)
         print(f"Затрачено токенов: {summary_tokens}. Среднее количество токенов: {summary_tokens / total:.2f}", file=f)
         print(unsucces, file=f)
