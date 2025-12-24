@@ -3,7 +3,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-DB_PATH = Path("logs.db")
+DB_PATH = Path(__file__).resolve().parent.parent / "logs.db"
 
 
 def init_db() -> None:
@@ -119,10 +119,10 @@ def log_action(
 
         cursor.execute(
             """
-        INSERT INTO action_logs (component, action_type, message, details, session_id)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO action_logs (component, action_type, message, details, session_id, tokens_used)
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
-            (component, action_type, message, details_json, session_id),
+            (component, action_type, message, details_json, session_id, tokens_used),
         )
 
         conn.commit()

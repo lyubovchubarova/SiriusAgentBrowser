@@ -1,52 +1,135 @@
 document.addEventListener("DOMContentLoaded", () => {
-	const themeToggle = document.getElementById("theme-toggle");
-
-	// загрузка сохранённой темы
-	const savedTheme = localStorage.getItem("theme");
-	if (savedTheme === "dark") {
-		document.body.classList.add("dark");
-		themeToggle.textContent = "☀️";
-	} else {
-		themeToggle.textContent = "🌙";
-	}
-
-	// переключатель
-	themeToggle.addEventListener("click", () => {
-		document.body.classList.toggle("dark");
-		const isDark = document.body.classList.contains("dark");
-
-		localStorage.setItem("theme", isDark ? "dark" : "light");
-		themeToggle.textContent = isDark ? "☀️" : "🌙";
-	});
-
+	// --- ЭЛЕМЕНТЫ UI ---
 	const chatContainer = document.getElementById("chat-container");
 	const promptInput = document.getElementById("prompt-input");
 	const sendBtn = document.getElementById("send-btn");
 	const stopBtn = document.getElementById("stop-btn");
-	const clearHistoryBtn = document.getElementById("clear-history");
+	const micBtn = document.getElementById("mic-btn");
+	
+	// Темы
+	const themeMenuBtn = document.getElementById("theme-menu-btn");
+	const themeOptions = document.getElementById("theme-options");
+	const themeBtns = document.querySelectorAll(".theme-opt");
 
-	// Clear history handler
-	clearHistoryBtn.addEventListener("click", () => {
-		chatHistory = [];
-		chatContainer.innerHTML = `
-			<div class="message agent-message">
-				Привет! Я Sirius Agent. Чем могу помочь в браузере?
-			</div>
-		`;
-	});
+	// Звук
+	const muteBtn = document.getElementById("mute-toggle");
 
-	// Configuration
+	// --- КОНФИГУРАЦИЯ API ---
 	const API_URL = "http://127.0.0.1:8000/chat";
 	const STREAM_URL = "http://127.0.0.1:8000/stream";
 	const STOP_URL = "http://127.0.0.1:8000/stop";
 	const HEALTH_URL = "http://127.0.0.1:8000/health";
+	const ANSWER_URL = "http://127.0.0.1:8000/answer";
 
+	// --- СОСТОЯНИЕ ---
 	let currentThinkingDiv = null;
 	let isConnected = false;
+	let isWaitingForAnswer = false;
 	let evtSource = null;
-	let chatHistory = []; // Store chat history
+	let chatHistory = [];
+	let isMuted = localStorage.getItem("isMuted") === "true";
 
-	// Initial state
+	// --- ИНИЦИАЛИЗАЦИЯ ---
+	
+	// 1. Темы
+	function applyTheme(theme) {
+		if (theme === "light") {
+			document.body.removeAttribute("data-theme");
+		} else {
+			document.body.setAttribute("data-theme", theme);
+		}
+		localStorage.setItem("theme", theme);
+	}
+
+	const savedTheme = localStorage.getItem("theme") || "light";
+	applyTheme(savedTheme);
+
+	themeMenuBtn.addEventListener("click", (e) => {
+		e.stopPropagation();
+		themeOptions.classList.toggle("active");
+	});
+
+	document.addEventListener("click", (e) => {
+		if (!themeOptions.contains(e.target) && e.target !== themeMenuBtn) {
+			themeOptions.classList.remove("active");
+		}
+	});
+
+	themeBtns.forEach(btn => {
+		btn.addEventListener("click", () => {
+			const theme = btn.dataset.theme;
+			applyTheme(theme);
+			themeOptions.classList.remove("active");
+		});
+	});
+
+	// 2. Звук (TTS)
+	function updateMuteIcon() {
+		muteBtn.textContent = isMuted ? "🔇" : "🔊";
+		muteBtn.title = isMuted ? "Включить звук" : "Выключить звук";
+	}
+	updateMuteIcon();
+
+	muteBtn.addEventListener("click", () => {
+		isMuted = !isMuted;
+		localStorage.setItem("isMuted", isMuted);
+		updateMuteIcon();
+		if (isMuted) {
+			window.speechSynthesis.cancel();
+		}
+	});
+
+	function speakText(text) {
+		if (isMuted || !text) return;
+		
+		// Очистка текста от markdown символов для озвучки
+		const cleanText = text.replace(/[*#`_\[\]]/g, "");
+		
+		const utterance = new SpeechSynthesisUtterance(cleanText);
+		utterance.lang = "ru-RU";
+		window.speechSynthesis.speak(utterance);
+	}
+
+	// 3. Голосовой ввод (STT)
+	if ("webkitSpeechRecognition" in window) {
+		const recognition = new webkitSpeechRecognition();
+		recognition.continuous = false;
+		recognition.interimResults = false;
+		recognition.lang = "ru-RU";
+
+		recognition.onstart = () => {
+			micBtn.classList.add("listening");
+		};
+
+		recognition.onend = () => {
+			micBtn.classList.remove("listening");
+		};
+
+		recognition.onresult = (event) => {
+			const transcript = event.results[0][0].transcript;
+			promptInput.value = transcript;
+			promptInput.focus();
+		};
+
+		recognition.onerror = (event) => {
+			console.error("Speech recognition error", event.error);
+			micBtn.classList.remove("listening");
+		};
+
+		micBtn.addEventListener("click", () => {
+			if (micBtn.classList.contains("listening")) {
+				recognition.stop();
+			} else {
+				recognition.start();
+			}
+		});
+	} else {
+		micBtn.style.display = "none";
+	}
+
+	// --- ЛОГИКА ЧАТА ---
+
+	// Начальное состояние кнопок
 	sendBtn.disabled = true;
 	promptInput.disabled = true;
 	promptInput.placeholder = "Connecting to server...";
@@ -60,9 +143,8 @@ document.addEventListener("DOMContentLoaded", () => {
 						isConnected = true;
 						sendBtn.disabled = false;
 						promptInput.disabled = false;
-						promptInput.placeholder = "Type a message...";
+						promptInput.placeholder = "Введите задачу...";
 						addStatus("Connected to agent server.");
-						// Start stream listener only when connected
 						initEventSource();
 					}
 				}
@@ -82,18 +164,22 @@ document.addEventListener("DOMContentLoaded", () => {
 			});
 	}
 
-	// Poll health every 1s
+	// Проверка здоровья сервера
 	setInterval(checkHealth, 1000);
-	checkHealth(); // Check immediately
+	checkHealth();
 
 	function addMessage(text, type) {
 		const div = document.createElement("div");
 		div.className = `message ${type}-message`;
+		
 		if (type === "agent" && typeof marked !== "undefined") {
 			div.innerHTML = marked.parse(text);
+			// Озвучиваем ответ агента
+			speakText(text);
 		} else {
 			div.textContent = text;
 		}
+		
 		chatContainer.appendChild(div);
 		chatContainer.scrollTop = chatContainer.scrollHeight;
 	}
@@ -104,7 +190,6 @@ document.addEventListener("DOMContentLoaded", () => {
 		div.textContent = text;
 		div.id = "current-status";
 
-		// Remove previous status if exists
 		const prev = document.getElementById("current-status");
 		if (prev) prev.remove();
 
@@ -114,11 +199,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
 	function getOrCreateThinkingDiv() {
 		if (!currentThinkingDiv) {
-			// Collapse all previous thinking containers to keep UI clean
+			// Сворачиваем предыдущие блоки thinking
 			document.querySelectorAll(".thinking-content").forEach((el) => {
 				if (!el.classList.contains("collapsed")) {
 					el.classList.add("collapsed");
-					// Update icon
 					const header = el.previousElementSibling;
 					if (header) {
 						const icon = header.querySelector(".toggle-icon");
@@ -127,21 +211,16 @@ document.addEventListener("DOMContentLoaded", () => {
 				}
 			});
 
-			// Create container
 			const container = document.createElement("div");
 			container.className = "thinking-container";
 
-			// Create header
 			const header = document.createElement("div");
 			header.className = "thinking-header";
-			header.innerHTML =
-				'<span>Thinking Process</span><span class="toggle-icon">▼</span>';
+			header.innerHTML = '<span>Thinking Process</span><span class="toggle-icon">▼</span>';
 
-			// Create content
 			const content = document.createElement("div");
 			content.className = "thinking-content";
 
-			// Toggle logic
 			header.addEventListener("click", () => {
 				content.classList.toggle("collapsed");
 				const icon = header.querySelector(".toggle-icon");
@@ -155,7 +234,6 @@ document.addEventListener("DOMContentLoaded", () => {
 			chatContainer.appendChild(container);
 			chatContainer.scrollTop = chatContainer.scrollHeight;
 
-			// Store the content div as the target for streaming
 			currentThinkingDiv = content;
 		}
 		return currentThinkingDiv;
@@ -169,7 +247,6 @@ document.addEventListener("DOMContentLoaded", () => {
 		evtSource = new EventSource(STREAM_URL);
 
 		evtSource.onmessage = (event) => {
-			// console.log("Stream event:", event.data);
 			if (event.data === ": keepalive") return;
 
 			try {
@@ -181,6 +258,15 @@ document.addEventListener("DOMContentLoaded", () => {
 					chatContainer.scrollTop = chatContainer.scrollHeight;
 				} else if (data.type === "status") {
 					addStatus(data.content);
+				} else if (data.type === "question") {
+					// Агент задает вопрос пользователю
+					addMessage(data.content, "agent");
+					isWaitingForAnswer = true;
+					promptInput.disabled = false;
+					sendBtn.disabled = false;
+					promptInput.focus();
+					promptInput.placeholder = "Введите ответ...";
+					addStatus("Ожидание ответа пользователя...");
 				}
 			} catch (e) {
 				console.error("Error parsing stream event:", e);
@@ -189,21 +275,41 @@ document.addEventListener("DOMContentLoaded", () => {
 
 		evtSource.onerror = (err) => {
 			console.error("EventSource failed:", err);
-			// EventSource automatically tries to reconnect
 		};
 	}
-
-	// Start listening to the stream
-	// initEventSource(); // Moved to checkHealth
 
 	async function sendMessage() {
 		const text = promptInput.value.trim();
 		if (!text) return;
 
-		// Reset thinking div for the new request
+		// Если мы в режиме ожидания ответа на вопрос агента
+		if (isWaitingForAnswer) {
+			addMessage(text, "user");
+			promptInput.value = "";
+			promptInput.disabled = true;
+			sendBtn.disabled = true;
+
+			try {
+				await fetch(ANSWER_URL, {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ text: text }),
+				});
+				isWaitingForAnswer = false;
+				promptInput.placeholder = "Введите задачу...";
+				addStatus("Ответ отправлен...");
+			} catch (e) {
+				console.error("Failed to send answer", e);
+				addMessage("Ошибка отправки ответа", "agent");
+				promptInput.disabled = false;
+				sendBtn.disabled = false;
+			}
+			return;
+		}
+
+		// Обычный режим отправки задачи
 		currentThinkingDiv = null;
 
-		// UI Updates
 		addMessage(text, "user");
 		promptInput.value = "";
 		promptInput.disabled = true;
@@ -212,7 +318,6 @@ document.addEventListener("DOMContentLoaded", () => {
 		stopBtn.style.display = "flex";
 		addStatus("Агент думает...");
 
-		// Add user message to history
 		chatHistory.push({ role: "user", content: text });
 
 		try {
@@ -229,13 +334,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
 			const data = await response.json();
 
-			// Remove status
 			const status = document.getElementById("current-status");
 			if (status) status.remove();
 
 			if (data.status === "success") {
 				addMessage(data.result, "agent");
-				// Add agent response to history
 				chatHistory.push({ role: "assistant", content: data.result });
 			} else {
 				const errorMsg = data.message || data.detail || "Unknown error";
@@ -255,8 +358,6 @@ document.addEventListener("DOMContentLoaded", () => {
 			sendBtn.style.display = "flex";
 			stopBtn.style.display = "none";
 			promptInput.focus();
-
-			// Reset thinking div again to ensure next tokens (if any delayed) don't append to old one
 			currentThinkingDiv = null;
 		}
 	}
@@ -264,9 +365,9 @@ document.addEventListener("DOMContentLoaded", () => {
 	async function stopExecution() {
 		try {
 			await fetch(STOP_URL, { method: "POST" });
-			addStatus("Отправлен сигнал остановки...");
-		} catch (error) {
-			console.error("Failed to stop:", error);
+			addStatus("Остановка...");
+		} catch (e) {
+			console.error("Failed to stop", e);
 		}
 	}
 
@@ -274,101 +375,8 @@ document.addEventListener("DOMContentLoaded", () => {
 	stopBtn.addEventListener("click", stopExecution);
 
 	promptInput.addEventListener("keypress", (e) => {
-		if (e.key === "Enter" && !e.shiftKey) {
-			e.preventDefault();
+		if (e.key === "Enter") {
 			sendMessage();
 		}
 	});
-
-	const micBtn = document.getElementById("mic-btn");
-    let recognition = null;
-
-    // Проверяем поддержку API
-    if ('webkitSpeechRecognition' in window) {
-        recognition = new webkitSpeechRecognition();
-        recognition.continuous = false; // Остановить запись после одной фразы
-        recognition.interimResults = true; // Показывать текст в процессе говорения
-        recognition.lang = 'ru-RU'; // Установите нужный язык
-
-        recognition.onstart = () => {
-            micBtn.classList.add("listening");
-            promptInput.placeholder = "Говорите...";
-        };
-
-        recognition.onend = () => {
-            micBtn.classList.remove("listening");
-            promptInput.placeholder = isConnected ? "Введите задачу..." : "Connecting...";
-            promptInput.focus();
-        };
-
-		recognition.onresult = (event) => {
-            let interimTranscript = '';
-            let finalTranscript = '';
-
-            for (let i = event.resultIndex; i < event.results.length; ++i) {
-                if (event.results[i].isFinal) {
-                    finalTranscript += event.results[i][0].transcript;
-                } else {
-                    interimTranscript += event.results[i][0].transcript;
-                }
-            }
-
-            // Показываем промежуточный результат в плейсхолдере или инпуте
-            if (interimTranscript) {
-                promptInput.placeholder = interimTranscript + "...";
-            }
-
-            if (finalTranscript) {
-                const currentText = promptInput.value;
-                const prefix = (currentText && !currentText.endsWith(' ')) ? ' ' : '';
-                
-                // 1. Добавляем распознанный текст в инпут
-                promptInput.value = currentText + prefix + finalTranscript;
-
-                // 2. Останавливаем распознавание
-                recognition.stop();
-
-                // 3. АВТОМАТИЧЕСКАЯ ОТПРАВКА
-                setTimeout(() => {
-                    if (promptInput.value.trim()) {
-                        sendMessage();
-                    }
-                }, 500);
-            }
-        };
-
-        recognition.onerror = (event) => {
-            console.error("Speech recognition error", event.error);
-            micBtn.classList.remove("listening");
-            
-            // КЛЮЧЕВОЙ МОМЕНТ: Обработка отсутствия прав
-            if (event.error === 'not-allowed' || event.error === 'permission-denied') {
-                addStatus("Требуется разрешение на микрофон.");
-                // Открываем страницу разрешения в новой вкладке
-                chrome.tabs.create({ url: 'permission.html' });
-            }
-        };
-	} else {
-		micBtn.style.display = 'none'; // Скрыть кнопку, если браузер не поддерживает
-		console.warn("Web Speech API not supported");
-	}
-
-    micBtn.addEventListener("click", () => {
-        if (!recognition) return;
-
-        if (micBtn.classList.contains("listening")) {
-            recognition.stop();
-        } else {
-            // Если соединение еще не установлено, не даем говорить (опционально)
-            if (!isConnected) {
-                addStatus("Дождитесь соединения с сервером.");
-                return;
-            }
-            try {
-                recognition.start();
-            } catch (e) {
-                console.error(e);
-            }
-        }
-    });
 });
