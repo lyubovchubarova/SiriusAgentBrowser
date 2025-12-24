@@ -125,7 +125,9 @@ class GoogleCalendarController:
                 token_file.write(creds.to_json())
 
         self.service = build("calendar", "v3", credentials=creds)
-        print("[GoogleCalendarController] Successfully authenticated with Google Calendar.")
+        print(
+            "[GoogleCalendarController] Successfully authenticated with Google Calendar."
+        )
 
     def _detect_timezone_name(self) -> str:
         """Best-effort detection of local IANA timezone name.
@@ -218,7 +220,9 @@ class GoogleCalendarController:
                     "event": {
                         "id": event_id,
                         "summary": summary,
-                        "start": {"dateTime": self._ensure_local(start_time).isoformat()},
+                        "start": {
+                            "dateTime": self._ensure_local(start_time).isoformat()
+                        },
                         "end": {"dateTime": self._ensure_local(end_time).isoformat()},
                     },
                 }
@@ -286,7 +290,9 @@ class GoogleCalendarController:
             return {"status": "error", "message": "Not authenticated"}
 
         try:
-            self.service.events().delete(calendarId="primary", eventId=event_id).execute()
+            self.service.events().delete(
+                calendarId="primary", eventId=event_id
+            ).execute()
             print(f"[GoogleCalendarController] Deleted event: {event_id}")
             self._open_calendar_default()
             return {
@@ -312,14 +318,16 @@ class GoogleCalendarController:
             date = self._current_date
 
         # Определяем начало и конец дня в локальной таймзоне
-        start_of_day = datetime.datetime.combine(date, datetime.time.min).replace(tzinfo=self._local_tz)
-        end_of_day = datetime.datetime.combine(date, datetime.time.max).replace(tzinfo=self._local_tz)
+        start_of_day = datetime.datetime.combine(date, datetime.time.min).replace(
+            tzinfo=self._local_tz
+        )
+        end_of_day = datetime.datetime.combine(date, datetime.time.max).replace(
+            tzinfo=self._local_tz
+        )
 
         if not self.service:
             if os.environ.get("MOCK_CALENDAR", "false").lower() == "true":
-                print(
-                    f"[GoogleCalendarController MOCK] Listed events for {date}"
-                )
+                print(f"[GoogleCalendarController MOCK] Listed events for {date}")
                 return {
                     "status": "success",
                     "date": date.isoformat(),
@@ -427,7 +435,11 @@ class GoogleCalendarController:
 
         try:
             # Получаем текущее событие
-            event = self.service.events().get(calendarId="primary", eventId=event_id).execute()
+            event = (
+                self.service.events()
+                .get(calendarId="primary", eventId=event_id)
+                .execute()
+            )
 
             # Обновляем поля
             if summary:
@@ -451,7 +463,9 @@ class GoogleCalendarController:
 
             # Сохраняем изменения
             updated_event = (
-                self.service.events().update(calendarId="primary", eventId=event_id, body=event).execute()
+                self.service.events()
+                .update(calendarId="primary", eventId=event_id, body=event)
+                .execute()
             )
 
             print(f"[GoogleCalendarController] Updated event: {event_id}")
@@ -496,20 +510,29 @@ class GoogleCalendarController:
             except Exception as e:
                 error_msg = str(e)
                 print(f"[GoogleCalendarController] Error opening calendar: {error_msg}")
-                return {"status": "error", "message": f"Failed to open calendar: {error_msg}"}
+                return {
+                    "status": "error",
+                    "message": f"Failed to open calendar: {error_msg}",
+                }
         else:
             # Если callback не установлен, пробуем открыть системный браузер
             try:
                 opened = webbrowser.open(calendar_url)
-                print(f"[GoogleCalendarController] Opened calendar via webbrowser: {calendar_url}")
+                print(
+                    f"[GoogleCalendarController] Opened calendar via webbrowser: {calendar_url}"
+                )
                 return {
                     "status": "success" if opened else "info",
-                    "message": "Calendar opened" if opened else "Tried to open calendar; check default browser.",
+                    "message": "Calendar opened"
+                    if opened
+                    else "Tried to open calendar; check default browser.",
                     "url": calendar_url,
                 }
             except Exception as e:
                 error_msg = str(e)
-                print(f"[GoogleCalendarController] Error opening calendar via webbrowser: {error_msg}")
+                print(
+                    f"[GoogleCalendarController] Error opening calendar via webbrowser: {error_msg}"
+                )
                 return {
                     "status": "error",
                     "message": f"Failed to open calendar: {error_msg}",
