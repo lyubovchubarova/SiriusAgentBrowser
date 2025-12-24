@@ -92,13 +92,6 @@ class AgentWorker(threading.Thread):
 
             query, chat_history, result_queue = item
 
-            # Clear input queue from stale messages
-            while not input_queue.empty():
-                try:
-                    input_queue.get_nowait()
-                except queue.Empty:
-                    break
-
             try:
                 logger.info(f"Worker processing query: {query}")
                 if self.orchestrator:
@@ -115,40 +108,11 @@ class AgentWorker(threading.Thread):
                         # Send to global log queue for /stream endpoint
                         log_queue.put(json.dumps({"type": "token", "content": token}))
 
-                    def on_user_input(question: str) -> str:
-                        import json
-
-                        logger.info(f"Requesting user input: {question}")
-                        # Send question to client
-                        log_queue.put(
-                            json.dumps({"type": "question", "content": question})
-                        )
-
-                        # Block until answer received
-                        while True:
-                            answer = input_queue.get()
-                            if answer == "__STOP__":
-                                if (
-                                    self.orchestrator
-                                    and self.orchestrator._stop_requested
-                                ):
-                                    logger.info(
-                                        "User input interrupted by stop signal."
-                                    )
-                                    return "STOPPED"
-                                else:
-                                    # Stale stop signal, ignore
-                                    continue
-
-                            logger.info(f"Received user answer: {answer}")
-                            return answer
-
                     result = self.orchestrator.process_request(
                         query,
                         chat_history,
                         status_callback=on_status,
                         stream_callback=on_token,
-                        user_input_callback=on_user_input,
                     )
                     result_queue.put({"status": "success", "result": result})
                 else:

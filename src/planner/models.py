@@ -16,6 +16,7 @@ Action = Literal[
     "solve_captcha",
     "ask_user",
     "call_tool",
+    "send_keys",
 ]
 
 
