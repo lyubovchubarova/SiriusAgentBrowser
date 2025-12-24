@@ -26,7 +26,7 @@ def request(prompt: str) -> str:
     subprocess.run(
         shlex.split(f'venv/Scripts/python src/main.py "{prompt}"'),
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
+        stderr=subprocess.DEVNULL,
     )
     db = "logs.db"
     q1 = "SELECT session_id FROM action_logs ORDER BY id DESC LIMIT 1"
@@ -39,7 +39,9 @@ def request(prompt: str) -> str:
         return json.dumps({"request": prompt, "objects": []}, ensure_ascii=False)
     sid = r[0]
     rows = [dict(x) for x in cur.execute(q2, (sid,)).fetchall()]
-    return json.dumps({"request": prompt, "objects": rows}, ensure_ascii=False, indent=2)
+    return json.dumps(
+        {"request": prompt, "objects": rows}, ensure_ascii=False, indent=2
+    )
 
 
 def judge(response: str) -> str:
@@ -55,7 +57,7 @@ def judge(response: str) -> str:
     client = openai.OpenAI(
         api_key=YANDEX_CLOUD_API_KEY,
         base_url="https://rest-assistant.api.cloud.yandex.net/v1",
-        project=YANDEX_CLOUD_FOLDER
+        project=YANDEX_CLOUD_FOLDER,
     )
 
     return client.responses.create(
@@ -64,6 +66,7 @@ def judge(response: str) -> str:
         instructions=system_prompt,
         input=response,
     ).output_text
+
 
 def test_prompts() -> None:
     with TESTS_PROMPTS_PATH.open("r", encoding="utf-8") as f:
@@ -76,9 +79,7 @@ def test_prompts() -> None:
     bar = tqdm.tqdm(total=total, desc="Tests", unit="req")
     unsucces = []
     for idx, obj in enumerate(data, 1):
-        TEMP_RESULT_PATH.open("w", encoding="utf8").write(
-            request(obj["query"])
-        )
+        TEMP_RESULT_PATH.open("w", encoding="utf8").write(request(obj["query"]))
         TEMP_JUDGE_PATH.open("w", encoding="utf8").write(
             judge(TEMP_RESULT_PATH.open("r", encoding="utf8").read())
         )
@@ -92,22 +93,31 @@ def test_prompts() -> None:
 
         con = sqlite3.connect("logs.db")
         cur = con.cursor()
-        res = cur.execute("SELECT total_tokens FROM session_stats ORDER BY start_time DESC LIMIT 1").fetchone()
+        res = cur.execute(
+            "SELECT total_tokens FROM session_stats ORDER BY start_time DESC LIMIT 1"
+        ).fetchone()
         con.close()
         summary_tokens += res[0]
         pct_succes = succes / idx * 100
-        bar.set_postfix({
-            "success_pct": f"{pct_succes:.2f}%",
-            "avg_tokens": f"{summary_tokens / idx:.2f}"
-        })
+        bar.set_postfix(
+            {
+                "success_pct": f"{pct_succes:.2f}%",
+                "avg_tokens": f"{summary_tokens / idx:.2f}",
+            }
+        )
         bar.update(1)
 
     bar.close()
     print(f"Итог: {succes}/{total} успешных ({succes / total * 100:.2f}%)")
-    print(f"Затрачено токенов: {summary_tokens}. Среднее количество токенов: {summary_tokens / total:.2f}")
+    print(
+        f"Затрачено токенов: {summary_tokens}. Среднее количество токенов: {summary_tokens / total:.2f}"
+    )
     with LOGS_PATH.open("w", encoding="utf8") as f:
         print(f"Итог: {succes}/{total} успешных ({succes / total * 100:.2f}%)", file=f)
-        print(f"Затрачено токенов: {summary_tokens}. Среднее количество токенов: {summary_tokens / total:.2f}", file=f)
+        print(
+            f"Затрачено токенов: {summary_tokens}. Среднее количество токенов: {summary_tokens / total:.2f}",
+            file=f,
+        )
         print(unsucces, file=f)
 
 

@@ -18,7 +18,9 @@ class GoogleCalendarTool(CalendarTool):
         self, credentials_path: str = "credentials.json", token_path: str = "token.json"
     ) -> None:
         # Use absolute paths relative to the project root if not provided
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        base_dir = os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        )
 
         if not os.path.isabs(credentials_path):
             self.credentials_path = os.path.join(base_dir, credentials_path)
@@ -37,7 +39,9 @@ class GoogleCalendarTool(CalendarTool):
         return "google_calendar"
 
     def description(self) -> str:
-        return "Tool for interacting with Google Calendar (list, create, delete events)."
+        return (
+            "Tool for interacting with Google Calendar (list, create, delete events)."
+        )
 
     def _authenticate(self) -> None:
         """
@@ -60,7 +64,9 @@ class GoogleCalendarTool(CalendarTool):
                 creds.refresh(Request())  # type: ignore[no-untyped-call]
             else:
                 if not os.path.exists(self.credentials_path):
-                    print(f"Warning: {self.credentials_path} not found. Calendar tool will not work.")
+                    print(
+                        f"Warning: {self.credentials_path} not found. Calendar tool will not work."
+                    )
                     return
 
                 # Check if we are in a headless/server environment where we can't open a browser
@@ -87,7 +93,12 @@ class GoogleCalendarTool(CalendarTool):
     ) -> list[dict[str, Any]]:
         if not self.service:
             if os.environ.get("MOCK_CALENDAR", "false").lower() == "true":
-                return [{"summary": "Mock Event", "start": {"dateTime": start_time.isoformat()}}]
+                return [
+                    {
+                        "summary": "Mock Event",
+                        "start": {"dateTime": start_time.isoformat()},
+                    }
+                ]
             return [{"error": "Not authenticated"}]
 
         try:
@@ -118,8 +129,11 @@ class GoogleCalendarTool(CalendarTool):
             # Fallback for testing/mocking if real auth fails but we want to simulate success
             # Remove this in production!
             if os.environ.get("MOCK_CALENDAR", "false").lower() == "true":
-                 print(f"[GoogleCalendar MOCK] Created event: {summary} at {start_time}")
-                 return {"status": "created (mock)", "event": {"summary": summary, "start": str(start_time)}}
+                print(f"[GoogleCalendar MOCK] Created event: {summary} at {start_time}")
+                return {
+                    "status": "created (mock)",
+                    "event": {"summary": summary, "start": str(start_time)},
+                }
 
             return {"error": "Not authenticated"}
 
@@ -150,7 +164,9 @@ class GoogleCalendarTool(CalendarTool):
             return {"error": "Not authenticated"}
 
         try:
-            self.service.events().delete(calendarId="primary", eventId=event_id).execute()
+            self.service.events().delete(
+                calendarId="primary", eventId=event_id
+            ).execute()
             print(f"[GoogleCalendar] Deleted event: {event_id}")
             return {"status": "deleted", "eventId": event_id}
         except Exception as e:

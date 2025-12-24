@@ -30,7 +30,7 @@ try:
             {"role": "user", "content": "Hello, are you working?"},
         ],
         temperature=0.1,
-        extra_body={"reasoningOptions": {"mode": "ENABLED_HIDDEN"}}
+        extra_body={"reasoningOptions": {"mode": "ENABLED_HIDDEN"}},
     )
     print("Response:", response.choices[0].message.content)
 except Exception as e:
