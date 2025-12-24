@@ -12,10 +12,10 @@ import webbrowser
 from collections.abc import Callable
 from typing import Any
 
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore[import-untyped]
-from googleapiclient.discovery import build  # type: ignore[import-untyped]
+from google.auth.transport.requests import Request  # type: ignore[import-not-found]
+from google.oauth2.credentials import Credentials  # type: ignore[import-not-found]
+from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore[import-not-found]
+from googleapiclient.discovery import build  # type: ignore[import-not-found]
 
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
@@ -97,12 +97,12 @@ class GoogleCalendarController:
 
         # Попытка загрузить сохранённые учётные данные
         if os.path.exists(self.token_path):
-            creds = Credentials.from_authorized_user_file(self.token_path, SCOPES)  # type: ignore[no-untyped-call]
+            creds = Credentials.from_authorized_user_file(self.token_path, SCOPES)
 
         # Если учётные данные отсутствуют или невалидны
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())  # type: ignore[no-untyped-call]
+                creds.refresh(Request())
             else:
                 if not os.path.exists(self.credentials_path):
                     print(

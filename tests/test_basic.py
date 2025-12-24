@@ -9,7 +9,7 @@ import sys
 
 import dotenv
 import openai
-import tqdm
+from tqdm import tqdm
 
 dotenv.load_dotenv()
 YANDEX_CLOUD_FOLDER = os.getenv("YANDEX_CLOUD_FOLDER")
@@ -61,12 +61,14 @@ def judge(response: str) -> str:
         project=YANDEX_CLOUD_FOLDER,
     )
 
-    return client.responses.create(
-        model=f"gpt://{YANDEX_CLOUD_FOLDER}/{YANDEX_CLOUD_MODEL}",
-        temperature=0.3,
-        instructions=system_prompt,
-        input=response,
-    ).output_text
+    return str(
+        client.responses.create(
+            model=f"gpt://{YANDEX_CLOUD_FOLDER}/{YANDEX_CLOUD_MODEL}",
+            temperature=0.3,
+            instructions=system_prompt,
+            input=response,
+        ).output_text
+    )
 
 
 def test_prompts() -> None:
@@ -77,7 +79,7 @@ def test_prompts() -> None:
     summary_tokens = 0
     total = len(data)
 
-    bar = tqdm.tqdm(total=total, desc="Tests", unit="req")
+    bar = tqdm(total=total, desc="Tests", unit="req")
     unsucces = []
     for idx, obj in enumerate(data, 1):
         TEMP_RESULT_PATH.open("w", encoding="utf8").write(request(obj["query"]))
