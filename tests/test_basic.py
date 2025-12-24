@@ -7,7 +7,7 @@ from pathlib import Path
 
 import dotenv
 import openai
-from tqdm import tqdm  # type: ignore
+from tqdm import tqdm
 
 dotenv.load_dotenv()
 YANDEX_CLOUD_FOLDER = os.getenv("YANDEX_CLOUD_FOLDER")

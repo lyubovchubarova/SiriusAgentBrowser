@@ -97,20 +97,6 @@ class Orchestrator:
             print(f"[STATUS] {msg}")
 
         try:
-            # 0. Intent Classification - DISABLED (Always Agent Mode)
-            # report_status("Analyzing request...")
-            # intent = self.planner.classify_intent(user_request, session_id=session_id)
-            # logger.info(f"Intent classified as: {intent}")
-
-            # Always assume agent mode
-            # intent = "agent"
-
-            # if intent == "chat":
-            #     report_status("Generating answer...")
-            #     answer = self.planner.generate_direct_answer(
-            #         user_request, stream_callback=None, session_id=session_id
-            #     )
-            #     return answer
 
             # 1. Планирование
             logger.info("Creating plan...")
