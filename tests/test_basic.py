@@ -5,12 +5,10 @@ import shlex
 import sqlite3
 import subprocess
 import time
-from typing import Any
 
 import dotenv
 import openai
 import tqdm
-
 
 dotenv.load_dotenv()
 YANDEX_CLOUD_FOLDER = os.getenv("YANDEX_CLOUD_FOLDER")
