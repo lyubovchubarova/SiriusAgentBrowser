@@ -5,6 +5,7 @@ import shlex
 import sqlite3
 import subprocess
 import time
+import sys
 
 import dotenv
 import openai
@@ -24,7 +25,7 @@ LOGS_PATH = pathlib.Path("tests/logs/" + time.strftime("%Y%m%d_%H%M%S") + ".log"
 
 def request(prompt: str) -> str:
     subprocess.run(
-        shlex.split(f'venv/Scripts/python src/main.py "{prompt}"'),
+        [sys.executable, "src/main.py", prompt],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
