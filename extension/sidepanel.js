@@ -87,6 +87,8 @@ document.addEventListener("DOMContentLoaded", () => {
 		
 		const utterance = new SpeechSynthesisUtterance(cleanText);
 		utterance.lang = "ru-RU";
+		utterance.rate = 1.7;     // Скорость речи (0.1 до 10)
+		utterance.pitch = 1;    // Тональность (0 до 2)
 		window.speechSynthesis.speak(utterance);
 	}
 
@@ -109,6 +111,12 @@ document.addEventListener("DOMContentLoaded", () => {
 			const transcript = event.results[0][0].transcript;
 			promptInput.value = transcript;
 			promptInput.focus();
+
+			setTimeout(() => {
+				if (transcript.trim()) {
+					sendMessage();
+				}
+			}, 100);
 		};
 
 		recognition.onerror = (event) => {

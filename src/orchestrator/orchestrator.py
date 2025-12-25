@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+import time
 import uuid
 from typing import TYPE_CHECKING, Any, cast
 
@@ -70,7 +71,7 @@ class Orchestrator:
         chat_history: list[dict[str, str]] | None = None,
         status_callback: Any = None,
         stream_callback: Any = None,
-        user_input_callback: Any = None,
+        max_execution_time: int = 180,
     ) -> str:
         """
         Обрабатывает пользовательский запрос.
@@ -97,21 +98,6 @@ class Orchestrator:
             print(f"[STATUS] {msg}")
 
         try:
-            # 0. Intent Classification - DISABLED (Always Agent Mode)
-            # report_status("Analyzing request...")
-            # intent = self.planner.classify_intent(user_request, session_id=session_id)
-            # logger.info(f"Intent classified as: {intent}")
-
-            # Always assume agent mode
-            # intent = "agent"
-
-            # if intent == "chat":
-            #     report_status("Generating answer...")
-            #     answer = self.planner.generate_direct_answer(
-            #         user_request, stream_callback=None, session_id=session_id
-            #     )
-            #     return answer
-
             # 1. Планирование
             logger.info("Creating plan...")
             report_status("Thinking... (Generating Plan)")
@@ -171,12 +157,21 @@ class Orchestrator:
             # Dynamic execution loop
             max_steps = 20  # Safety limit
             step_count = 0
+            start_time = time.time()
 
             # Memory of executed steps for cycle detection
             execution_history: list[dict[str, Any]] = []
             final_page_content = ""
 
             while plan.steps and step_count < max_steps:
+                # Check for timeout
+                if time.time() - start_time > max_execution_time:
+                    logger.warning(f"Execution timed out after {max_execution_time}s.")
+                    results.append(
+                        f"Execution stopped: Timeout ({max_execution_time}s exceeded)."
+                    )
+                    break
+
                 if self._stop_requested:
                     logger.info("Execution stopped by user request.")
                     results.append("Execution stopped by user.")
@@ -204,22 +199,12 @@ class Orchestrator:
                     logger.info(f"Asking user: {step.description}")
                     report_status(f"Waiting for user input: {step.description}")
 
-                    if user_input_callback:
-                        try:
-                            user_answer = user_input_callback(step.description)
-                        except Exception as e:
-                            logger.error(f"Error getting user input: {e}")
-                            user_answer = "Error: Could not get user input."
-                    else:
-                        # Fallback to console input
-                        print(f"\n[AGENT QUESTION] {step.description}")
-                        try:
-                            user_answer = input("Your answer: ")
-                        except EOFError:
-                            user_answer = "No answer provided."
-
-                    result = f"User answered: {user_answer}"
-                    logger.info(f"User answer received: {user_answer}")
+                    # Stop execution and return the question as the result.
+                    # The user will reply in the chat, and the next request will contain the answer in history.
+                    result = f"QUESTION_TO_USER: {step.description}"
+                    results.append(result)
+                    logger.info(f"Stopping execution to ask user: {step.description}")
+                    break
 
                 elif step.action == "finish":
                     logger.info(f"Task completed: {step.description}")
@@ -607,7 +592,7 @@ class Orchestrator:
                     # 1. Check for immediate repetition (A -> A)
                     # We check the last 3 entries to see if the current one matches ANY of them with the same result
                     # This catches A -> A and A -> B -> A if results are same (e.g. "No changes")
-                    for i, prev in enumerate(execution_history[:-1][-3:]):
+                    for _i, prev in enumerate(execution_history[:-1][-3:]):
                         if (
                             prev["description"] == last_entry["description"]
                             and prev["action"] == last_entry["action"]
@@ -617,15 +602,15 @@ class Orchestrator:
                             break
 
                     # 2. Check for alternating loops (A -> B -> A -> B)
-                    if not cycle_warning and len(execution_history) >= 4:
-                        # Check if [last-3, last-2] == [last-1, last]
-                        if (
-                            execution_history[-1]["description"]
-                            == execution_history[-3]["description"]
-                            and execution_history[-2]["description"]
-                            == execution_history[-4]["description"]
-                        ):
-                            cycle_warning = "CRITICAL: Alternating loop detected (A -> B -> A -> B). You are stuck in a loop. Stop and try a completely different approach."
+                    if (
+                        not cycle_warning
+                        and len(execution_history) >= 4
+                        and execution_history[-1]["description"]
+                        == execution_history[-3]["description"]
+                        and execution_history[-2]["description"]
+                        == execution_history[-4]["description"]
+                    ):
+                        cycle_warning = "CRITICAL: Alternating loop detected (A -> B -> A -> B). You are stuck in a loop. Stop and try a completely different approach."
 
                     # 3. Check for repeated failures
                     if "Failed" in last_entry["result"]:
